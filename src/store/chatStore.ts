@@ -141,10 +141,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       id: tempId,
       conversation_id: conversationId,
       sender_id: user.uid,
-      content,
-      message_type: type,
-      media_url: mediaUrl,
-      reply_to: replyToId,
+      content: content || '',
+      message_type: type || 'text',
+      media_url: mediaUrl || null,
+      reply_to: replyToId || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       deleted_at: null,
@@ -156,10 +156,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (currentConv) {
       await setDoc(doc(db, 'conversations', conversationId), {
         id: conversationId,
-        type: currentConv.type,
-        created_at: currentConv.created_at,
+        type: currentConv.type || 'direct',
+        created_at: currentConv.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        memberIds: currentConv.members.map(m => m.id)
+        memberIds: (currentConv.members || []).map(m => m.id)
       }, { merge: true });
     }
 
