@@ -28,6 +28,7 @@ export default function CallModal() {
   
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   // Audio elements for ringtones
   const dialtoneRef = useRef<HTMLAudioElement | null>(null);
@@ -319,6 +320,54 @@ export default function CallModal() {
     }
   };
 
+  const switchCameraFacingMode = async () => {
+    if (!localStream) {
+      toast.error("No active camera stream");
+      return;
+    }
+    const nextFacingMode = facingMode === 'user' ? 'environment' : 'user';
+    try {
+      const currentVideoTrack = localStream.getVideoTracks()[0];
+      if (currentVideoTrack) {
+        currentVideoTrack.stop();
+        localStream.removeTrack(currentVideoTrack);
+      }
+
+      let newStream: MediaStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: nextFacingMode } },
+          audio: false
+        });
+      } catch (err) {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: nextFacingMode },
+          audio: false
+        });
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (newVideoTrack) {
+        localStream.addTrack(newVideoTrack);
+        if (pcRef.current) {
+          const senders = pcRef.current.getSenders();
+          const videoSender = senders.find(s => s.track?.kind === 'video');
+          if (videoSender) {
+            videoSender.replaceTrack(newVideoTrack);
+          }
+        }
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
+        }
+        setFacingMode(nextFacingMode);
+        toast.success(`Switched to ${nextFacingMode === 'user' ? 'Front' : 'Back'} Camera`);
+      }
+    } catch (e) {
+      console.error("Failed to switch camera:", e);
+      toast.error("Could not flip camera mode");
+    }
+  };
+
   if (!isCalling && !incomingCall) return null;
 
   if (incomingCall && !isCalling) {
@@ -335,14 +384,14 @@ export default function CallModal() {
           <p className="text-zinc-400 mb-8 capitalize">{incomingCall.type} call</p>
           
           <div className="flex gap-8 w-full justify-center">
-             <button onClick={rejectCall} className="flex flex-col items-center gap-2 group">
-               <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-all">
-                  <PhoneOff size={28} />
+             <button onClick={rejectCall} className="flex flex-col items-center gap-2 group" title="Decline Call">
+               <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-all shadow-md">
+                  <PhoneOff size={28} className="rotate-[135deg]" />
                </div>
                <span className="text-sm font-medium text-red-500 group-hover:text-red-400 transition-colors">Decline</span>
              </button>
-             <button onClick={acceptCall} className="flex flex-col items-center gap-2 group">
-               <div className="w-16 h-16 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center group-hover:bg-green-500 group-hover:text-white transition-all">
+             <button onClick={acceptCall} className="flex flex-col items-center gap-2 group" title="Accept Call">
+               <div className="w-16 h-16 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center group-hover:bg-green-500 group-hover:text-white transition-all shadow-md">
                   <Phone size={28} className="animate-bounce" />
                </div>
                <span className="text-sm font-medium text-green-500 group-hover:text-green-400 transition-colors">Accept</span>
@@ -407,16 +456,8 @@ export default function CallModal() {
               {cameraOn ? <Video size={24} /> : <VideoOff size={24} />}
             </button>
             <button 
-              onClick={() => {
-                if (localStream) {
-                  const videoTrack = localStream.getVideoTracks()[0];
-                  if (videoTrack) {
-                    toast.success('Camera switched (Front/Back)');
-                  } else {
-                    toast('No secondary camera detected');
-                  }
-                }
-              }}
+              onClick={switchCameraFacingMode}
+              title={`Flip Camera (Current: ${facingMode === 'user' ? 'Front' : 'Back'})`}
               className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all active:scale-95 text-white"
             >
               <SwitchCamera size={24} />
@@ -424,8 +465,8 @@ export default function CallModal() {
           </>
         )}
         
-        <button onClick={() => endCall()} className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 transition-all active:scale-95 shadow-lg">
-          <PhoneOff size={24} />
+        <button onClick={() => endCall()} title="End Call" className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 hover:bg-red-700 text-white transition-all active:scale-95 shadow-xl ring-4 ring-red-500/30">
+          <PhoneOff size={26} className="rotate-[135deg]" />
         </button>
       </div>
     </div>

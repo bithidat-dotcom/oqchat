@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db } from '../lib/firebase';
-import { collection, doc, setDoc, onSnapshot, query, where, orderBy, getDocs, deleteDoc, updateDoc, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, onSnapshot, query, where, orderBy, getDocs, deleteDoc, updateDoc, serverTimestamp, writeBatch, getDoc, arrayUnion } from 'firebase/firestore';
 import { useAuthStore } from './authStore';
 import { encryptText, decryptText } from '../lib/encryption';
 
@@ -17,6 +17,7 @@ export interface Message {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  deleted_for?: string[];
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'error';
 }
 
@@ -51,6 +52,7 @@ interface ChatState {
   updateMessage: (message: Message) => void;
   setMessages: (conversationId: string, messages: Message[]) => void;
   deleteMessage: (conversationId: string, messageId: string) => void;
+  deleteMessageForMe: (conversationId: string, messageId: string) => Promise<void>;
   editMessage: (conversationId: string, messageId: string, newContent: string) => void;
   deleteConversation: (conversationId: string) => void;
   clearMessages: (conversationId: string) => void;
@@ -119,6 +121,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   deleteMessage: async (conversationId, messageId) => {
     await deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageId));
+  },
+
+  deleteMessageForMe: async (conversationId, messageId) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    try {
+      const msgRef = doc(db, 'conversations', conversationId, 'messages', messageId);
+      await updateDoc(msgRef, {
+        deleted_for: arrayUnion(user.uid)
+      });
+    } catch (err) {
+      console.error("Error setting deleted_for array:", err);
+    }
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: (state.messages[conversationId] || []).filter(m => m.id !== messageId)
+      }
+    }));
   },
 
   editMessage: async (conversationId, messageId, newContent) => {
@@ -254,20 +275,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   media_url: decryptedMediaUrl
                 };
               })).then((decryptedMsgs) => {
+                const visibleMsgs = decryptedMsgs.filter(m => !m.deleted_for || !m.deleted_for.includes(user.uid));
                 const oldMsgs = get().messages[c.id] || [];
-                const isNew = oldMsgs.length > 0 && decryptedMsgs.length > oldMsgs.length;
+                const isNew = oldMsgs.length > 0 && visibleMsgs.length > oldMsgs.length;
 
-                get().setMessages(c.id, decryptedMsgs);
+                get().setMessages(c.id, visibleMsgs);
                 
-                if (decryptedMsgs.length > 0) {
+                if (visibleMsgs.length > 0) {
                    set(state => ({
                      conversations: state.conversations.map(convItem => 
-                       convItem.id === c.id ? { ...convItem, lastMessage: decryptedMsgs[decryptedMsgs.length - 1] } : convItem
+                       convItem.id === c.id ? { ...convItem, lastMessage: visibleMsgs[visibleMsgs.length - 1] } : convItem
                      )
                    }));
 
                    if (isNew) {
-                     const lastMsg = decryptedMsgs[decryptedMsgs.length - 1];
+                     const lastMsg = visibleMsgs[visibleMsgs.length - 1];
                      if (lastMsg.sender_id !== user.uid) {
                        const pref = localStorage.getItem('setting_msg_sound_type') || 'standard';
                        import('../lib/audioManager').then(({ playNotificationSound }) => {

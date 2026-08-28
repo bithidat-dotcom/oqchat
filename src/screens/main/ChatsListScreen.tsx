@@ -197,10 +197,10 @@ export default function ChatsListScreen() {
             )}
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-[#88FF00] to-[#8EFE00] text-zinc-950 transition-all hover:brightness-105 active:scale-95 shadow-md shadow-[#88FF00]/25"
               title="New Chat"
             >
-              <Plus size={20} />
+              <Plus size={20} strokeWidth={2.5} />
             </button>
           </div>
         </div>
