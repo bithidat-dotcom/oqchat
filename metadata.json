@@ -1,0 +1,11 @@
+{
+  "name": "Remix GazzChat",
+  "description": "A premium mobile app featuring real-time messaging, high-quality voice and video calls, and seamless media sharing.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
