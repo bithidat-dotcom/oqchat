@@ -23,6 +23,7 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [isSendingMedia, setIsSendingMedia] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
+  const [time, setTime] = useState(Date.now());
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -57,6 +58,14 @@ export default function ChatScreen() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Keep a live timer running to refresh relative calculations like typing indicator
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const conversation = conversations.find(c => c.id === conversationId);
   const rawMessages = conversationId ? messages[conversationId] || [] : [];
   
@@ -68,9 +77,11 @@ export default function ChatScreen() {
   const otherMember = isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]);
   const isOnline = isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false);
   
-  const now = new Date().getTime();
-  const otherTypingTimestamp = conversation?.typing?.[otherMember?.id || ''] || null;
-  const isTyping = otherTypingTimestamp ? (now - otherTypingTimestamp < 3000) : false;
+  // Guard otherTypingTimestamp so we never check our own typing state
+  const otherTypingTimestamp = (otherMember && otherMember.id !== user?.uid) 
+    ? (conversation?.typing?.[otherMember.id] || null) 
+    : null;
+  const isTyping = otherTypingTimestamp ? (time - otherTypingTimestamp < 3000) : false;
 
   const getPresenceText = () => {
     if (isSelf) return 'Message yourself (Notes, links, media)';
@@ -779,10 +790,15 @@ export default function ChatScreen() {
             <p className="text-xs text-zinc-400">Select a chat to forward to:</p>
 
             <div className="flex-1 overflow-y-auto space-y-2 no-scrollbar">
-              {conversations.map((c) => {
-                const cIsSelf = c.members.length === 1 || c.members.every(m => m.id === user?.uid);
-                const cOther = cIsSelf ? currentUserProfile : (c.members.find(m => m.id !== user?.uid) || c.members[0]);
-                if (!cOther) return null;
+              {conversations
+                .filter((c) => {
+                  const cIsSelf = c.members.length === 1 || c.members.every(m => m.id === user?.uid);
+                  const cOther = cIsSelf ? currentUserProfile : (c.members.find(m => m.id !== user?.uid) || c.members[0]);
+                  return !!cOther;
+                })
+                .map((c) => {
+                  const cIsSelf = c.members.length === 1 || c.members.every(m => m.id === user?.uid);
+                  const cOther = cIsSelf ? currentUserProfile : (c.members.find(m => m.id !== user?.uid) || c.members[0])!;
 
                 return (
                   <button
@@ -848,7 +864,7 @@ export default function ChatScreen() {
             </div>
             
             <div className="flex flex-col items-center">
-              <Avatar src={otherMember.avatar_url} online={isOnline} size="xl" className="h-28 w-28 text-3xl mb-4 shadow-md" />
+              <Avatar src={otherMember.avatar_url} online={isOnline} size="2xl" className="mb-4 shadow-md" />
               <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-1">
                 {otherMember.display_name}
               </h2>

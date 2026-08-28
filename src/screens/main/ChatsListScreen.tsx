@@ -93,6 +93,21 @@ export default function ChatsListScreen() {
     if (!currentUserProfile || !user) return;
     const isSelf = targetUser.id === currentUserProfile.id;
 
+    // Check if conversation already exists
+    const existingConv = conversations.find(c => 
+      c.type === 'direct' && (
+        isSelf 
+          ? c.members.length === 1 || (c.members.length === 2 && c.members[0].id === currentUserProfile.id && c.members[1].id === currentUserProfile.id)
+          : c.members.some(m => m.id === targetUser.id) && c.members.some(m => m.id !== currentUserProfile.id)
+      )
+    );
+
+    if (existingConv) {
+      setSearch('');
+      navigate(`/chat/${existingConv.id}`);
+      return;
+    }
+
     const newConvId = `conv-${crypto.randomUUID()}`;
     const members = isSelf ? [currentUserProfile] : [currentUserProfile, targetUser];
     const memberIds = members.map(m => m.id);
@@ -183,10 +198,15 @@ export default function ChatsListScreen() {
         ) : filteredConversations.length > 0 || searchedGlobalUsers.length > 0 ? (
           <div className="space-y-1">
             {/* Active Saved Chats */}
-            {filteredConversations.map((conv) => {
-              const isSelf = conv.members.length === 1 || conv.members.every(m => m.id === user?.uid);
-              const otherMember = isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0]);
-              if (!otherMember) return null;
+            {filteredConversations
+              .filter((conv) => {
+                const isSelf = conv.members.length === 1 || conv.members.every(m => m.id === user?.uid);
+                const otherMember = isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0]);
+                return !!otherMember;
+              })
+              .map((conv) => {
+                const isSelf = conv.members.length === 1 || conv.members.every(m => m.id === user?.uid);
+                const otherMember = isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0])!;
               
               const isBlocked = blockedUserIds.includes(otherMember.id);
               const chatMsgs = messages[conv.id] || [];

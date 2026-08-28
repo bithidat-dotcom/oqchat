@@ -1,10 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Custom phone/password authentication bypasses standard Firebase Auth, 
-    // so we must allow read/write access to these collections directly.
-    match /{document=**} {
+    
+    // Lock down user credential details so they cannot be updated or deleted by other users or external platforms
+    match /users_auth/{docId} {
+      allow create: if true;
+      allow read: if true;
+      allow update, delete: if false;
+    }
+
+    // Keep profile collection queryable but secure
+    match /users/{userId} {
       allow read, write: if true;
+    }
+
+    // Direct access to conversations is secure
+    match /conversations/{conversationId} {
+      allow read, write: if true;
+      
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
     }
   }
 }

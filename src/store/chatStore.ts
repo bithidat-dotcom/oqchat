@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { db } from '../lib/firebase';
 import { collection, doc, setDoc, onSnapshot, query, where, orderBy, getDocs, deleteDoc, updateDoc, serverTimestamp, writeBatch, getDoc } from 'firebase/firestore';
 import { useAuthStore } from './authStore';
+import { encryptText, decryptText } from '../lib/encryption';
 
 export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file';
 
@@ -116,8 +117,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   editMessage: async (conversationId, messageId, newContent) => {
+    const encryptedContent = newContent ? await encryptText(newContent, conversationId) : newContent;
     await updateDoc(doc(db, 'conversations', conversationId, 'messages', messageId), {
-      content: newContent,
+      content: encryptedContent,
       updated_at: new Date().toISOString()
     });
   },
@@ -139,13 +141,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!user) return;
 
     const tempId = crypto.randomUUID();
+    const encryptedContent = content ? await encryptText(content, conversationId) : content;
+    const encryptedMediaUrl = mediaUrl ? await encryptText(mediaUrl, conversationId) : mediaUrl;
+
     const tempMessage: Message = {
       id: tempId,
       conversation_id: conversationId,
       sender_id: user.uid,
-      content: content || '',
+      content: encryptedContent,
       message_type: type || 'text',
-      media_url: mediaUrl || null,
+      media_url: encryptedMediaUrl,
       reply_to: replyToId || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -222,16 +227,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const mq = query(collection(db, 'conversations', d.id, 'messages'), orderBy('created_at', 'asc'));
           unsubMessages[d.id] = onSnapshot(mq, (mSnap) => {
             const msgs = mSnap.docs.map(md => md.data() as Message);
-            get().setMessages(d.id, msgs);
-            
-            // update last message and unread count locally (can be expanded)
-            if (msgs.length > 0) {
-               set(state => ({
-                 conversations: state.conversations.map(c => 
-                   c.id === d.id ? { ...c, lastMessage: msgs[msgs.length - 1] } : c
-                 )
-               }));
-            }
+            Promise.all(msgs.map(async (msg) => {
+              const decryptedContent = msg.content ? await decryptText(msg.content, d.id) : msg.content;
+              const decryptedMediaUrl = msg.media_url ? await decryptText(msg.media_url, d.id) : msg.media_url;
+              return {
+                ...msg,
+                content: decryptedContent,
+                media_url: decryptedMediaUrl
+              };
+            })).then((decryptedMsgs) => {
+              get().setMessages(d.id, decryptedMsgs);
+              
+              if (decryptedMsgs.length > 0) {
+                 set(state => ({
+                   conversations: state.conversations.map(c => 
+                     c.id === d.id ? { ...c, lastMessage: decryptedMsgs[decryptedMsgs.length - 1] } : c
+                   )
+                 }));
+              }
+            });
           });
         }
       }

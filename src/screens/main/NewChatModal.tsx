@@ -12,6 +12,7 @@ interface NewChatModalProps {
 
 export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
   const [query, setQuery] = useState('');
+  const [allUsers, setAllUsers] = useState<any[]>([]);
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const { user, profile: currentUserProfile } = useAuthStore();
@@ -21,36 +22,45 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
   useEffect(() => {
     if (!isOpen) {
       setQuery('');
-      setResults([]);
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!query.trim()) {
+      setAllUsers([]);
       setResults([]);
       return;
     }
 
     setLoading(true);
-    const searchUsers = () => {
-      const allUsersStr = localStorage.getItem('oqchat_all_users');
-      const allUsers = allUsersStr ? JSON.parse(allUsersStr) : [];
-      
-      const filtered = allUsers.filter((u: any) => 
-        u.id !== user?.uid && 
-        (u.username.toLowerCase().includes(query.toLowerCase()) || 
-         u.display_name.toLowerCase().includes(query.toLowerCase()))
-      );
-      setResults(filtered);
-      setLoading(false);
-    };
+    // Fetch all users from Firestore users collection
+    import('../../lib/firebase').then(({ db }) => {
+      import('firebase/firestore').then(({ collection, getDocs }) => {
+        getDocs(collection(db, 'users')).then(snap => {
+          const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setAllUsers(users);
+          setLoading(false);
+        }).catch(err => {
+          console.error("Error fetching users:", err);
+          setLoading(false);
+        });
+      });
+    });
+  }, [isOpen]);
 
-    const debounce = setTimeout(searchUsers, 300);
-    return () => clearTimeout(debounce);
-  }, [query, user?.uid]);
+  useEffect(() => {
+    const searchVal = query.trim().toLowerCase();
+    if (!searchVal) {
+      // Show all other profiles by default so user can easily browse and click
+      setResults(allUsers.filter((u: any) => u.id !== user?.uid));
+      return;
+    }
+
+    const filtered = allUsers.filter((u: any) => 
+      u.id !== user?.uid && 
+      ((u.username?.toLowerCase() || '').includes(searchVal) || 
+       (u.display_name?.toLowerCase() || '').includes(searchVal))
+    );
+    setResults(filtered);
+  }, [query, allUsers, user?.uid]);
 
   const startChat = async (targetUserId: string) => {
-    if (!currentUserProfile) return;
+    if (!currentUserProfile || !user) return;
     const isSelf = targetUserId === currentUserProfile.id;
 
     // Check if conversation already exists
@@ -68,29 +78,37 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
       return;
     }
 
-    // Mock create new conversation
-    const newConvId = `mock-conv-${crypto.randomUUID()}`;
-    let selectedUser = isSelf ? currentUserProfile : null;
-    if (!selectedUser) {
-      const allUsersStr = localStorage.getItem('oqchat_all_users');
-      const allUsers = allUsersStr ? JSON.parse(allUsersStr) : [];
-      selectedUser = allUsers.find((u: any) => u.id === targetUserId);
-    }
-    
-    if (!selectedUser) return;
+    setLoading(true);
+    try {
+      const selectedUser = isSelf ? currentUserProfile : allUsers.find((u: any) => u.id === targetUserId);
+      if (!selectedUser) {
+        setLoading(false);
+        return;
+      }
 
-    const newConversation = {
-      id: newConvId,
-      type: 'direct' as const,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      members: isSelf ? [currentUserProfile] : [currentUserProfile, selectedUser]
-    };
-    
-    useChatStore.getState().setConversations([newConversation, ...conversations]);
-    
-    onClose();
-    navigate(`/chat/${newConvId}`);
+      const newConvId = `conv-${crypto.randomUUID()}`;
+      const members = isSelf ? [currentUserProfile] : [currentUserProfile, selectedUser];
+      const memberIds = members.map(m => m.id);
+
+      const { db } = await import('../../lib/firebase');
+      const { doc, setDoc } = await import('firebase/firestore');
+
+      // Create conversation document in Firestore
+      await setDoc(doc(db, 'conversations', newConvId), {
+        id: newConvId,
+        type: 'direct',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        memberIds: memberIds
+      });
+
+      onClose();
+      navigate(`/chat/${newConvId}`);
+    } catch (err) {
+      console.error("Error creating conversation:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -156,7 +174,7 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
               >
                 <Avatar src={profile.avatar_url} size="md" />
                 <div className="flex flex-col">
-                  <span className="font-medium">{profile.display_name}</span>
+                  <span className="font-medium text-zinc-900 dark:text-zinc-50">{profile.display_name}</span>
                   <span className="text-sm text-zinc-500 dark:text-zinc-400">@{profile.username}</span>
                 </div>
               </button>
@@ -170,7 +188,7 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
           )
         ) : (
           <div className="p-4 text-center text-xs text-zinc-400">
-            Search for a user or message yourself to save notes
+            No other active profiles found on this platform yet
           </div>
         )}
       </div>
