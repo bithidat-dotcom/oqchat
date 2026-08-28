@@ -140,8 +140,8 @@ export default function ChatsListScreen() {
       <div className="px-4 pt-6 pb-2">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-sm">
-              <MessageSquare size={18} strokeWidth={2.5} />
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-sm overflow-hidden">
+              <img src="/favicon.jpg" alt="OQChat Logo" className="h-full w-full object-cover" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
           </div>

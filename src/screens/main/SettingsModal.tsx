@@ -249,7 +249,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   type="text" 
                   value={editBio}
                   onChange={(e) => setEditBio(e.target.value)}
-                  placeholder="Hey there! I am using GazzChat."
+                  placeholder="Hey there! I am using OQChat."
                   className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-base focus:border-brand-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
                 />
               </div>
@@ -446,10 +446,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800 space-y-4">
               <div className="flex items-center gap-3 text-brand-500 font-bold text-base">
                 <Info size={20} />
-                <span>GazzChat Terms of Service</span>
+                <span>OQChat Terms of Service</span>
               </div>
               <p>
-                Welcome to GazzChat. By accessing or using our real-time messaging platform, you agree to be bound by these terms. All communication, audio/video streams, and images shared in your personal storage remain encrypted and private to your account.
+                Welcome to OQChat. By accessing or using our real-time messaging platform, you agree to be bound by these terms. All communication, audio/video streams, and images shared in your personal storage remain encrypted and private to your account.
               </p>
 
               <h4 className="font-semibold text-zinc-900 dark:text-zinc-100">1. Data Protection & Encryption</h4>
@@ -463,7 +463,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </p>
 
               <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 text-xs text-zinc-400">
-                GazzChat Messenger • Version 2.4.0 (Build 2026.08)
+                OQChat Messenger • Version 2.4.0 (Build 2026.08)
               </div>
             </div>
           </div>

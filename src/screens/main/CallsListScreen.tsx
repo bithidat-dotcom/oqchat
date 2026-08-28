@@ -13,7 +13,7 @@ export default function CallsListScreen() {
   const [search, setSearch] = useState('');
 
   // Get all user profiles (from saved conversations + self + all_users)
-  const allUsersStr = localStorage.getItem('gazzchat_all_users');
+  const allUsersStr = localStorage.getItem('oqchat_all_users');
   const allGlobalUsers = allUsersStr ? JSON.parse(allUsersStr) : [];
 
   // Build a distinct list of profiles to call

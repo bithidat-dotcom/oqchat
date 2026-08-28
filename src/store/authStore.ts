@@ -66,8 +66,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
     
     const uid = snapshot.docs[0].id;
-    localStorage.setItem('gazzchat_uid', uid);
-    localStorage.setItem('gazzchat_phone', phone);
+    localStorage.setItem('oqchat_uid', uid);
+    localStorage.setItem('oqchat_phone', phone);
     get().initialize();
   },
 
@@ -90,14 +90,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       created_at: new Date().toISOString()
     });
     
-    localStorage.setItem('gazzchat_uid', uid);
-    localStorage.setItem('gazzchat_phone', phone);
+    localStorage.setItem('oqchat_uid', uid);
+    localStorage.setItem('oqchat_phone', phone);
     get().initialize();
   },
   
   initialize: () => {
-    const uid = localStorage.getItem('gazzchat_uid');
-    const phone = localStorage.getItem('gazzchat_phone');
+    const uid = localStorage.getItem('oqchat_uid');
+    const phone = localStorage.getItem('oqchat_phone');
     
     if (uid && phone) {
       set({ user: { uid, phone } });
@@ -133,8 +133,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }).catch(() => {});
     }
     
-    localStorage.removeItem('gazzchat_uid');
-    localStorage.removeItem('gazzchat_phone');
+    localStorage.removeItem('oqchat_uid');
+    localStorage.removeItem('oqchat_phone');
     set({ user: null, profile: null });
   }
 }));

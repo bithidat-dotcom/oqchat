@@ -1,5 +1,5 @@
 {
-  "name": "Remix GazzChat",
+  "name": "OQChat",
   "description": "A premium mobile app featuring real-time messaging, high-quality voice and video calls, and seamless media sharing.",
   "requestFramePermissions": [
     "camera",

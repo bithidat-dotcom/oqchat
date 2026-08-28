@@ -76,13 +76,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   blockUser: (userId) => set((state) => {
     const newBlocked = Array.from(new Set([...state.blockedUserIds, userId]));
-    localStorage.setItem('gazzchat_blocked_users', JSON.stringify(newBlocked));
+    localStorage.setItem('oqchat_blocked_users', JSON.stringify(newBlocked));
     return { blockedUserIds: newBlocked };
   }),
 
   unblockUser: (userId) => set((state) => {
     const newBlocked = state.blockedUserIds.filter(id => id !== userId);
-    localStorage.setItem('gazzchat_blocked_users', JSON.stringify(newBlocked));
+    localStorage.setItem('oqchat_blocked_users', JSON.stringify(newBlocked));
     return { blockedUserIds: newBlocked };
   }),
   
@@ -172,7 +172,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!user) return;
     
     set({ loading: true });
-    const savedBlocked = localStorage.getItem('gazzchat_blocked_users');
+    const savedBlocked = localStorage.getItem('oqchat_blocked_users');
     set({ blockedUserIds: savedBlocked ? JSON.parse(savedBlocked) : [] });
 
     if (unsubConversations) unsubConversations();

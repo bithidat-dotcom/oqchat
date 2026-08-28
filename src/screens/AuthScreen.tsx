@@ -30,7 +30,7 @@ export default function AuthScreen() {
         toast.success('Welcome back!');
       } else {
         await useAuthStore.getState().signUp(phone, password);
-        toast.success('Account created! Welcome to GazzChat.');
+        toast.success('Account created! Welcome to OQChat.');
       }
     } catch (error: any) {
       toast.error(error.message || 'Authentication failed');
@@ -43,10 +43,10 @@ export default function AuthScreen() {
     <div className="flex h-full flex-col items-center justify-center p-6 sm:p-12">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-500 text-white shadow-lg shadow-brand-500/30">
-            <MessageSquare size={32} strokeWidth={2.5} />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-500 text-white shadow-lg shadow-brand-500/30 overflow-hidden">
+            <img src="/favicon.jpg" alt="OQChat Logo" className="h-full w-full object-cover" />
           </div>
-          <h2 className="mt-6 text-3xl font-bold tracking-tight">GazzChat</h2>
+          <h2 className="mt-6 text-3xl font-bold tracking-tight">OQChat</h2>
           <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
             {isLogin ? 'Sign in to continue' : 'Create an account to get started'}
           </p>

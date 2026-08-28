@@ -33,7 +33,7 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
 
     setLoading(true);
     const searchUsers = () => {
-      const allUsersStr = localStorage.getItem('gazzchat_all_users');
+      const allUsersStr = localStorage.getItem('oqchat_all_users');
       const allUsers = allUsersStr ? JSON.parse(allUsersStr) : [];
       
       const filtered = allUsers.filter((u: any) => 
@@ -72,7 +72,7 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
     const newConvId = `mock-conv-${crypto.randomUUID()}`;
     let selectedUser = isSelf ? currentUserProfile : null;
     if (!selectedUser) {
-      const allUsersStr = localStorage.getItem('gazzchat_all_users');
+      const allUsersStr = localStorage.getItem('oqchat_all_users');
       const allUsers = allUsersStr ? JSON.parse(allUsersStr) : [];
       selectedUser = allUsers.find((u: any) => u.id === targetUserId);
     }
