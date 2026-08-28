@@ -91,14 +91,16 @@ export default function ChatsListScreen() {
 
   const startChatWithUser = async (targetUser: any) => {
     if (!currentUserProfile || !user) return;
-    const isSelf = targetUser.id === currentUserProfile.id;
+    const targetUserId = targetUser?.id || targetUser?.uid;
+    if (!targetUserId) return;
+    const isSelf = targetUserId === currentUserProfile.id;
 
     // Check if conversation already exists
     const existingConv = conversations.find(c => 
       c.type === 'direct' && (
         isSelf 
           ? c.members.length === 1 || (c.members.length === 2 && c.members[0].id === currentUserProfile.id && c.members[1].id === currentUserProfile.id)
-          : c.members.some(m => m.id === targetUser.id) && c.members.some(m => m.id !== currentUserProfile.id)
+          : c.members.some(m => m.id === targetUserId) && c.members.some(m => m.id !== currentUserProfile.id)
       )
     );
 
@@ -110,7 +112,7 @@ export default function ChatsListScreen() {
 
     const newConvId = `conv-${crypto.randomUUID()}`;
     const members = isSelf ? [currentUserProfile] : [currentUserProfile, targetUser];
-    const memberIds = members.map(m => m.id);
+    const memberIds = members.map(m => m?.id || m?.uid || '').filter(Boolean);
 
     const { db } = await import('../../lib/firebase');
     const { doc, setDoc } = await import('firebase/firestore');

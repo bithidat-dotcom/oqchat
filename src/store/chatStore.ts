@@ -204,7 +204,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const data = d.data();
         // Fetch member profiles
         const members = [];
-        for (const mId of data.memberIds) {
+        for (const mId of (data.memberIds || [])) {
           const mSnap = await getDoc(doc(db, 'users', mId));
           if (mSnap.exists()) {
             members.push({ id: mId, ...mSnap.data() });

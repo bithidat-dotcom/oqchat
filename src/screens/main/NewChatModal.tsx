@@ -88,7 +88,7 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
 
       const newConvId = `conv-${crypto.randomUUID()}`;
       const members = isSelf ? [currentUserProfile] : [currentUserProfile, selectedUser];
-      const memberIds = members.map(m => m.id);
+      const memberIds = members.map(m => m?.id || m?.uid || '').filter(Boolean);
 
       const { db } = await import('../../lib/firebase');
       const { doc, setDoc } = await import('firebase/firestore');

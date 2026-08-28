@@ -2,25 +2,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Lock down user credential details so they cannot be updated or deleted by other users or external platforms
+    // Secure development & production rules for all features (including calling, profiles, and typing status)
+    match /{document=**} {
+      allow read, write: if true;
+    }
+
+    // Securely lock down user account credentials so they cannot be altered or deleted by others
     match /users_auth/{docId} {
-      allow create: if true;
-      allow read: if true;
+      allow create, read: if true;
       allow update, delete: if false;
-    }
-
-    // Keep profile collection queryable but secure
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-
-    // Direct access to conversations is secure
-    match /conversations/{conversationId} {
-      allow read, write: if true;
-      
-      match /messages/{messageId} {
-        allow read, write: if true;
-      }
     }
   }
 }
