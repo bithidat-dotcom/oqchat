@@ -34,9 +34,9 @@ export default function CallModal() {
   const dialtoneRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    ringtoneRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg');
+    ringtoneRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/1359/1359-84.wav');
     ringtoneRef.current.loop = true;
-    dialtoneRef.current = new Audio('https://actions.google.com/sounds/v1/alarms/phone_ringing.ogg');
+    dialtoneRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-84.wav');
     dialtoneRef.current.loop = true;
     return () => {
        ringtoneRef.current?.pause();

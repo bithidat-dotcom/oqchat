@@ -16,7 +16,7 @@ export default function ChatScreen() {
   const { id: conversationId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, onlineUsers, profile: currentUserProfile } = useAuthStore();
-  const { conversations, messages, sendMessage, clearMessages, deleteMessage, editMessage } = useChatStore();
+  const { conversations, messages, sendMessage, clearMessages, deleteMessage, editMessage, fetchConversations } = useChatStore();
   const { setActiveCall, setCalling } = useCallStore();
   
   const [content, setContent] = useState('');
@@ -66,7 +66,46 @@ export default function ChatScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  const conversation = conversations.find(c => c.id === conversationId);
+  const [localConversation, setLocalConversation] = useState<any>(null);
+  const storeConversation = conversations.find(c => c.id === conversationId);
+  const conversation = storeConversation || localConversation;
+
+  useEffect(() => {
+    if (!conversationId || storeConversation) return;
+
+    const fetchLocalConv = async () => {
+      try {
+        const { db } = await import('../lib/firebase');
+        const { doc, getDoc } = await import('firebase/firestore');
+        const docSnap = await getDoc(doc(db, 'conversations', conversationId));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const memberIds = data.memberIds || [];
+          const memberPromises = memberIds.map(async (mId: string) => {
+            const mSnap = await getDoc(doc(db, 'users', mId));
+            if (mSnap.exists()) {
+              return { id: mId, ...mSnap.data() };
+            }
+            return { id: mId, username: 'Unknown', display_name: 'Unknown' };
+          });
+          const members = await Promise.all(memberPromises);
+          setLocalConversation({
+            id: docSnap.id,
+            type: data.type,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+            members: members,
+            typing: data.typing
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching local conversation fallback:", err);
+      }
+    };
+
+    fetchLocalConv();
+  }, [conversationId, storeConversation]);
+
   const rawMessages = conversationId ? messages[conversationId] || [] : [];
   
   const chatMessages = searchQuery.trim() 
@@ -109,6 +148,7 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!conversationId) return;
+    fetchConversations();
     setLoading(false);
     scrollToBottom();
   }, [conversationId, user?.uid, otherMember?.id]);

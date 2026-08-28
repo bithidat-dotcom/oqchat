@@ -198,59 +198,76 @@ export const useChatStore = create<ChatState>((set, get) => ({
     
     const q = query(collection(db, 'conversations'), where('memberIds', 'array-contains', user.uid));
     unsubConversations = onSnapshot(q, async (snapshot) => {
-      const convs: Conversation[] = [];
-      
-      for (const d of snapshot.docs) {
-        const data = d.data();
-        // Fetch member profiles
-        const members = [];
-        for (const mId of (data.memberIds || [])) {
-          const mSnap = await getDoc(doc(db, 'users', mId));
-          if (mSnap.exists()) {
-            members.push({ id: mId, ...mSnap.data() });
-          } else {
-            members.push({ id: mId, username: 'Unknown', display_name: 'Unknown' });
-          }
-        }
-        
-        convs.push({
-          id: d.id,
-          type: data.type,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          members: members,
-          typing: data.typing
+      try {
+        const convPromises = snapshot.docs.map(async (d) => {
+          const data = d.data();
+          const memberIds = data.memberIds || [];
+          
+          const memberPromises = memberIds.map(async (mId: string) => {
+            try {
+              const mSnap = await getDoc(doc(db, 'users', mId));
+              if (mSnap.exists()) {
+                return { id: mId, ...mSnap.data() };
+              }
+            } catch (err) {
+              console.error(`Error loading user profile for ${mId}:`, err);
+            }
+            return { id: mId, username: 'Unknown', display_name: 'Unknown' };
+          });
+          
+          const members = await Promise.all(memberPromises);
+          
+          return {
+            id: d.id,
+            type: data.type,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+            members: members,
+            typing: data.typing
+          };
         });
 
-        // Listen to messages for this conversation if not already listening
-        if (!unsubMessages[d.id]) {
-          const mq = query(collection(db, 'conversations', d.id, 'messages'), orderBy('created_at', 'asc'));
-          unsubMessages[d.id] = onSnapshot(mq, (mSnap) => {
-            const msgs = mSnap.docs.map(md => md.data() as Message);
-            Promise.all(msgs.map(async (msg) => {
-              const decryptedContent = msg.content ? await decryptText(msg.content, d.id) : msg.content;
-              const decryptedMediaUrl = msg.media_url ? await decryptText(msg.media_url, d.id) : msg.media_url;
-              return {
-                ...msg,
-                content: decryptedContent,
-                media_url: decryptedMediaUrl
-              };
-            })).then((decryptedMsgs) => {
-              get().setMessages(d.id, decryptedMsgs);
-              
-              if (decryptedMsgs.length > 0) {
-                 set(state => ({
-                   conversations: state.conversations.map(c => 
-                     c.id === d.id ? { ...c, lastMessage: decryptedMsgs[decryptedMsgs.length - 1] } : c
-                   )
-                 }));
-              }
+        const convs = await Promise.all(convPromises);
+
+        // Bind messages snapshots
+        convs.forEach((c) => {
+          if (!unsubMessages[c.id]) {
+            const mq = query(collection(db, 'conversations', c.id, 'messages'), orderBy('created_at', 'asc'));
+            unsubMessages[c.id] = onSnapshot(mq, (mSnap) => {
+              const msgs = mSnap.docs.map(md => md.data() as Message);
+              Promise.all(msgs.map(async (msg) => {
+                const decryptedContent = msg.content ? await decryptText(msg.content, c.id) : msg.content;
+                const decryptedMediaUrl = msg.media_url ? await decryptText(msg.media_url, c.id) : msg.media_url;
+                return {
+                  ...msg,
+                  content: decryptedContent,
+                  media_url: decryptedMediaUrl
+                };
+              })).then((decryptedMsgs) => {
+                get().setMessages(c.id, decryptedMsgs);
+                
+                if (decryptedMsgs.length > 0) {
+                   set(state => ({
+                     conversations: state.conversations.map(convItem => 
+                       convItem.id === c.id ? { ...convItem, lastMessage: decryptedMsgs[decryptedMsgs.length - 1] } : convItem
+                     )
+                   }));
+                }
+              });
+            }, (error) => {
+              console.error("Messages subscription error:", error);
             });
-          });
-        }
+          }
+        });
+
+        set({ conversations: convs, loading: false });
+      } catch (err) {
+        console.error("Error updating conversations list snapshot:", err);
+        set({ loading: false });
       }
-      
-      set({ conversations: convs, loading: false });
+    }, (error) => {
+      console.error("Conversations snapshot subscription failed:", error);
+      set({ loading: false });
     });
   }
 }));

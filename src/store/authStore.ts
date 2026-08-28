@@ -104,7 +104,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       onSnapshot(doc(db, 'users', uid), (docSnap) => {
         if (docSnap.exists()) {
-          set({ profile: docSnap.data() as Profile });
+          set({ profile: { id: uid, ...docSnap.data() } as Profile });
         } else {
           set({ profile: null });
         }
