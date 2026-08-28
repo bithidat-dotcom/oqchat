@@ -27,6 +27,7 @@ export interface Conversation {
   members: any[];
   lastMessage?: Message;
   unreadCount?: number;
+  typing?: Record<string, number | null>;
 }
 
 interface ChatState {
@@ -48,6 +49,7 @@ interface ChatState {
   deleteConversation: (conversationId: string) => void;
   clearMessages: (conversationId: string) => void;
   sendMessage: (conversationId: string, content: string, type?: MessageType, mediaUrl?: string, replyToId?: string | null) => Promise<void>;
+  setTypingStatus: (conversationId: string, isTyping: boolean) => Promise<void>;
   fetchConversations: () => Promise<void>;
 }
 
@@ -167,6 +169,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     await setDoc(doc(db, 'conversations', conversationId, 'messages', tempId), tempMessage);
   },
   
+  setTypingStatus: async (conversationId, isTyping) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    
+    // We update the typing mapping in the conversation doc
+    await setDoc(doc(db, 'conversations', conversationId), {
+      typing: {
+        [user.uid]: isTyping ? new Date().getTime() : null
+      }
+    }, { merge: true }).catch(console.error);
+  },
+
   fetchConversations: async () => {
     const user = useAuthStore.getState().user;
     if (!user) return;
@@ -199,7 +213,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           type: data.type,
           created_at: data.created_at,
           updated_at: data.updated_at,
-          members: members
+          members: members,
+          typing: data.typing
         });
 
         // Listen to messages for this conversation if not already listening

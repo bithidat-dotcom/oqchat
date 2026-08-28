@@ -21,7 +21,9 @@ export default function ChatScreen() {
   
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
-  const [isTyping, setIsTyping] = useState(false);
+  const [isSendingMedia, setIsSendingMedia] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -65,6 +67,23 @@ export default function ChatScreen() {
   const isSelf = conversation?.members.length === 1 || conversation?.members.every(m => m.id === user?.uid);
   const otherMember = isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]);
   const isOnline = isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false);
+  
+  const now = new Date().getTime();
+  const otherTypingTimestamp = conversation?.typing?.[otherMember?.id || ''] || null;
+  const isTyping = otherTypingTimestamp ? (now - otherTypingTimestamp < 3000) : false;
+
+  const getPresenceText = () => {
+    if (isSelf) return 'Message yourself (Notes, links, media)';
+    if (isTyping) return 'typing...';
+    
+    // Bangladesh sleeping logic
+    const bdTime = new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" });
+    const bdHour = new Date(bdTime).getHours();
+    const isNightInBd = bdHour >= 22 || bdHour < 6; // 10 PM to 6 AM
+    
+    if (!isOnline && isNightInBd) return 'Sleeping 🌙';
+    return isOnline ? 'Online' : 'Offline';
+  };
 
   const handleCall = (type: 'voice' | 'video') => {
     if (!otherMember || !user) return;
@@ -85,7 +104,7 @@ export default function ChatScreen() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [chatMessages.length, isTyping]);
+  }, [chatMessages.length]);
 
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -95,9 +114,12 @@ export default function ChatScreen() {
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
     setContent(e.target.value);
-    if (!isSelf && e.target.value.length > 0) {
-      setIsTyping(true);
-      setTimeout(() => setIsTyping(false), 2500);
+    if (!isSelf && conversationId) {
+      useChatStore.getState().setTypingStatus(conversationId, true);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        useChatStore.getState().setTypingStatus(conversationId, false);
+      }, 2000);
     }
   };
 
@@ -279,11 +301,14 @@ export default function ChatScreen() {
               <ChevronLeft size={24} />
             </button>
             
-            <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowUserProfile(true)}
+              className="flex items-center gap-3 text-left transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 p-1.5 -ml-1.5 rounded-xl"
+            >
               <Avatar src={otherMember?.avatar_url} online={isOnline} size="md" />
               <div className="flex flex-col">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold">{otherMember?.display_name}</span>
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">{otherMember?.display_name}</span>
                   {isSelf && (
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500 text-white uppercase tracking-wider">
                       You
@@ -292,10 +317,10 @@ export default function ChatScreen() {
                   {isMuted && <VolumeX size={14} className="text-zinc-400" />}
                 </div>
                 <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                  {isSelf ? 'Message yourself (Notes, links, media)' : isTyping ? 'typing...' : isOnline ? 'Online' : 'Offline'}
+                  {getPresenceText()}
                 </span>
               </div>
-            </div>
+            </button>
           </div>
 
           <div className="flex items-center gap-1">
@@ -569,6 +594,7 @@ export default function ChatScreen() {
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file && conversationId) {
+                  setIsSendingMedia(true);
                   try {
                     const compressed = await compressImage(file);
                     await sendMessage(conversationId, '', 'image', compressed, replyToMsg ? replyToMsg.id : null);
@@ -576,16 +602,27 @@ export default function ChatScreen() {
                     toast.success('Image sent');
                   } catch (error) {
                     toast.error('Failed to send image');
+                  } finally {
+                    setIsSendingMedia(false);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
                   }
                 }
               }}
             />
             <button 
               type="button" 
+              disabled={isSendingMedia}
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors dark:hover:bg-zinc-800 dark:hover:text-zinc-300",
+                isSendingMedia ? "opacity-50 cursor-not-allowed" : "hover:bg-zinc-100 hover:text-zinc-600"
+              )}
             >
-              <Paperclip size={20} />
+              {isSendingMedia ? (
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+              ) : (
+                <Paperclip size={20} />
+              )}
             </button>
             
             <div className="relative flex-1">
@@ -796,6 +833,92 @@ export default function ChatScreen() {
           </div>
         </div>
       )}
+      {/* User Profile Modal */}
+      {showUserProfile && otherMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Profile</h3>
+              <button 
+                onClick={() => setShowUserProfile(false)}
+                className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <Avatar src={otherMember.avatar_url} online={isOnline} size="xl" className="h-28 w-28 text-3xl mb-4 shadow-md" />
+              <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-1">
+                {otherMember.display_name}
+              </h2>
+              
+              <div className="flex items-center gap-2 mb-6">
+                <span className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium",
+                  isOnline 
+                    ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-400" 
+                    : getPresenceText().includes('Sleeping')
+                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400"
+                      : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+                )}>
+                  {isOnline ? (
+                    <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
+                  ) : getPresenceText().includes('Sleeping') ? (
+                    <span>🌙</span>
+                  ) : null}
+                  {getPresenceText().replace('typing...', 'Online')}
+                </span>
+              </div>
+              
+              <div className="w-full space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Email</span>
+                  <span className="text-zinc-900 dark:text-zinc-100">{otherMember.email || 'Private'}</span>
+                </div>
+                
+                {otherMember.bio && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">About</span>
+                    <span className="text-zinc-900 dark:text-zinc-100 text-sm leading-relaxed">{otherMember.bio}</span>
+                  </div>
+                )}
+                
+                <div className="flex flex-col gap-1 pt-2">
+                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Member Since</span>
+                  <span className="text-zinc-900 dark:text-zinc-100 text-sm">
+                    {otherMember.created_at ? format(new Date(otherMember.created_at), 'MMMM d, yyyy') : 'Unknown'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-8 flex gap-3">
+              <button
+                onClick={() => {
+                  setShowUserProfile(false);
+                  handleCall('voice');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-zinc-100 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+              >
+                <Phone size={18} />
+                Call
+              </button>
+              <button
+                onClick={() => {
+                  setShowUserProfile(false);
+                  handleCall('video');
+                }}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 shadow-sm shadow-brand-500/20"
+              >
+                <Video size={18} />
+                Video
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
