@@ -30,17 +30,16 @@ export default function CallModal() {
   const [cameraOn, setCameraOn] = useState(true);
 
   // Audio elements for ringtones
-  const ringtoneRef = useRef<HTMLAudioElement | null>(null);
   const dialtoneRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    ringtoneRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/1359/1359-84.wav');
-    ringtoneRef.current.loop = true;
     dialtoneRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-84.wav');
     dialtoneRef.current.loop = true;
     return () => {
-       ringtoneRef.current?.pause();
        dialtoneRef.current?.pause();
+       import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+         stopRingtoneSound();
+       });
     }
   }, []);
 
@@ -72,7 +71,9 @@ export default function CallModal() {
         // If we had an incoming call but it's no longer ringing (cancelled or answered elsewhere)
         if (!useCallStore.getState().isCalling) {
            setIncomingCall(null);
-           ringtoneRef.current?.pause();
+           import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+             stopRingtoneSound();
+           });
         }
       }
     });
@@ -82,11 +83,20 @@ export default function CallModal() {
   // Handle ringtones
   useEffect(() => {
     if (incomingCall && !isCalling) {
-      ringtoneRef.current?.play().catch(e => console.log("Audio play blocked by browser:", e));
+      const selectedRingtone = localStorage.getItem('setting_ringtone_type') || 'classic';
+      import('../lib/audioManager').then(({ startRingtoneSound }) => {
+        startRingtoneSound(selectedRingtone as any);
+      });
     } else {
-      ringtoneRef.current?.pause();
-      if (ringtoneRef.current) ringtoneRef.current.currentTime = 0;
+      import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+        stopRingtoneSound();
+      });
     }
+    return () => {
+      import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+        stopRingtoneSound();
+      });
+    };
   }, [incomingCall, isCalling]);
 
   useEffect(() => {
@@ -201,7 +211,9 @@ export default function CallModal() {
     setCalling(true);
     setActiveCall({ ...incomingCall, status: 'connected' });
     setIncomingCall(null);
-    ringtoneRef.current?.pause();
+    import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+      stopRingtoneSound();
+    });
 
     try {
       const { pc } = await setupWebRTC(callId, isVideo);
@@ -252,7 +264,9 @@ export default function CallModal() {
     const callId = incomingCall.id;
     await updateDoc(doc(db, 'calls', callId), { status: 'rejected' });
     setIncomingCall(null);
-    ringtoneRef.current?.pause();
+    import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+      stopRingtoneSound();
+    });
   };
 
   const endCall = async (callIdToend?: string, updateDb: boolean = true) => {
@@ -285,7 +299,9 @@ export default function CallModal() {
     setMicOn(true);
     setCameraOn(true);
     
-    ringtoneRef.current?.pause();
+    import('../lib/audioManager').then(({ stopRingtoneSound }) => {
+      stopRingtoneSound();
+    });
     dialtoneRef.current?.pause();
   };
 

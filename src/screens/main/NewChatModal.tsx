@@ -110,13 +110,15 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
     const isSelf = targetUserId === currentUserProfile.id;
 
     // Check if conversation already exists
-    const existingConv = conversations.find(c => 
-      c.type === 'direct' && (
-        isSelf 
-          ? c.members.length === 1 || (c.members.length === 2 && c.members[0].id === currentUserProfile.id && c.members[1].id === currentUserProfile.id)
-          : c.members.some(m => m.id === targetUserId) && c.members.some(m => m.id !== currentUserProfile.id)
-      )
-    );
+    const existingConv = conversations.find(c => {
+      if (c.type !== 'direct') return false;
+      const cIsSelf = c.members.length === 1 || c.members.every(m => m.id === user?.uid);
+      if (isSelf) {
+        return cIsSelf;
+      } else {
+        return !cIsSelf && c.members.some(m => m.id === targetUserId);
+      }
+    });
 
     if (existingConv) {
       onClose();
@@ -179,7 +181,9 @@ export default function NewChatModal({ isOpen, onClose }: NewChatModalProps) {
         avatar_url: groupAvatar.trim() || 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=120&auto=format&fit=crop&q=60',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        memberIds: memberIds
+        memberIds: memberIds,
+        admins: [user.uid],
+        coAdmins: []
       });
 
       onClose();

@@ -7,6 +7,8 @@ import { useAuthStore } from '../store/authStore';
 import { Camera } from 'lucide-react';
 import { Avatar } from '../components/ui/Avatar';
 import { compressImage } from '../lib/imageUtils';
+import { DatePicker } from '../components/ui/DatePicker';
+import { cn } from '../lib/utils';
 
 export default function ProfileSetupScreen() {
   const { user, profile } = useAuthStore();
@@ -15,6 +17,8 @@ export default function ProfileSetupScreen() {
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [gender, setGender] = useState('');
+  const [dob, setDob] = useState('');
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,7 +52,9 @@ export default function ProfileSetupScreen() {
         bio,
         is_online: true,
         last_seen: new Date().toISOString(),
-        avatar_url: avatarUrl
+        avatar_url: avatarUrl,
+        gender: gender || null,
+        dob: dob || null
       };
       
       const { db } = await import('../lib/firebase');
@@ -124,6 +130,35 @@ export default function ProfileSetupScreen() {
             required
             maxLength={20}
           />
+          <div className="w-full">
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+              Gender
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {['Male', 'Female', 'Other'].map((g) => (
+                <button
+                  type="button"
+                  key={g}
+                  onClick={() => setGender(g)}
+                  className={cn(
+                    "py-2.5 rounded-xl text-sm font-semibold transition-all border",
+                    gender === g
+                      ? "bg-brand-500 border-brand-500 text-white shadow-sm"
+                      : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  )}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <DatePicker
+            label="Date of Birth"
+            value={dob}
+            onChange={setDob}
+          />
+
           <div className="w-full">
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
               Bio (Optional)

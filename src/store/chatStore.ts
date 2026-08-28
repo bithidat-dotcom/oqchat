@@ -29,6 +29,11 @@ export interface Conversation {
   lastMessage?: Message;
   unreadCount?: number;
   typing?: Record<string, number | null>;
+  name?: string;
+  avatar_url?: string;
+  description?: string;
+  admins?: string[];
+  coAdmins?: string[];
 }
 
 interface ChatState {
@@ -223,7 +228,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
             created_at: data.created_at,
             updated_at: data.updated_at,
             members: members,
-            typing: data.typing
+            typing: data.typing,
+            name: data.name,
+            avatar_url: data.avatar_url,
+            description: data.description,
+            admins: data.admins,
+            coAdmins: data.coAdmins
           };
         });
 
@@ -244,6 +254,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   media_url: decryptedMediaUrl
                 };
               })).then((decryptedMsgs) => {
+                const oldMsgs = get().messages[c.id] || [];
+                const isNew = oldMsgs.length > 0 && decryptedMsgs.length > oldMsgs.length;
+
                 get().setMessages(c.id, decryptedMsgs);
                 
                 if (decryptedMsgs.length > 0) {
@@ -252,6 +265,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
                        convItem.id === c.id ? { ...convItem, lastMessage: decryptedMsgs[decryptedMsgs.length - 1] } : convItem
                      )
                    }));
+
+                   if (isNew) {
+                     const lastMsg = decryptedMsgs[decryptedMsgs.length - 1];
+                     if (lastMsg.sender_id !== user.uid) {
+                       const pref = localStorage.getItem('setting_msg_sound_type') || 'standard';
+                       import('../lib/audioManager').then(({ playNotificationSound }) => {
+                         playNotificationSound(pref as any);
+                       });
+                     }
+                   }
                 }
               });
             }, (error) => {

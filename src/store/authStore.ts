@@ -10,6 +10,8 @@ export interface Profile {
   bio: string | null;
   is_online: boolean;
   last_seen: string;
+  gender?: string;
+  dob?: string;
 }
 
 interface AuthState {

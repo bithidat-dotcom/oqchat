@@ -139,19 +139,32 @@ export default function ChatScreen() {
     : (isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]));
   const isOnline = isGroupOrCommunity ? false : (isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false));
   
-  // Guard otherTypingTimestamp so we never check our own typing state
-  const otherTypingTimestamp = (otherMember && otherMember.id !== user?.uid && !isGroupOrCommunity) 
-    ? (conversation?.typing?.[otherMember.id] || null) 
-    : null;
-  const isTyping = otherTypingTimestamp ? (time - otherTypingTimestamp < 3000) : false;
+  // Find all typing users in this conversation (excluding ourselves)
+  const typingUsers = React.useMemo(() => {
+    if (!conversation?.typing) return [];
+    return Object.entries(conversation.typing)
+      .filter(([uId, timestamp]) => {
+        if (uId === user?.uid) return false;
+        const ts = Number(timestamp);
+        return ts && (time - ts < 3000);
+      })
+      .map(([uId]) => {
+        // Find user in conversation members list
+        return conversation.members?.find((m: any) => m.id === uId) || { id: uId, display_name: 'Someone', avatar_url: '' };
+      });
+  }, [conversation?.typing, conversation?.members, user?.uid, time]);
 
   const getPresenceText = () => {
     if (isGroupOrCommunity) {
+      if (typingUsers.length > 0) {
+        const names = typingUsers.map(u => u.display_name).join(', ');
+        return `${names} ${typingUsers.length === 1 ? 'is' : 'are'} typing...`;
+      }
       const typeLabel = conversation?.type === 'group' ? 'Group Chat' : 'Community';
       return `${conversation?.members?.length || 0} members • ${typeLabel}`;
     }
     if (isSelf) return 'Message yourself (Notes, links, media)';
-    if (isTyping) return 'typing...';
+    if (typingUsers.length > 0) return 'typing...';
     
     // Bangladesh sleeping logic
     const bdTime = new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" });
@@ -173,6 +186,145 @@ export default function ChatScreen() {
     });
   };
 
+  const handleLeaveGroup = async () => {
+    if (!conversationId || !user) return;
+    if (!window.confirm("Are you sure you want to leave this group?")) return;
+    
+    try {
+      const { db } = await import('../lib/firebase');
+      const { doc, getDoc, updateDoc } = await import('firebase/firestore');
+      
+      const docRef = doc(db, 'conversations', conversationId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const currentMemberIds = data.memberIds || [];
+        const newMemberIds = currentMemberIds.filter((id: string) => id !== user.uid);
+        
+        // Handle admin reassignment if the leaving user was the sole admin
+        let newAdmins = data.admins || [];
+        if (newAdmins.includes(user.uid)) {
+          newAdmins = newAdmins.filter((id: string) => id !== user.uid);
+          if (newAdmins.length === 0 && newMemberIds.length > 0) {
+            const firstCoAdmin = (data.coAdmins || []).find((id: string) => newMemberIds.includes(id));
+            if (firstCoAdmin) {
+              newAdmins.push(firstCoAdmin);
+            } else {
+              newAdmins.push(newMemberIds[0]);
+            }
+          }
+        }
+        const newCoAdmins = (data.coAdmins || []).filter((id: string) => id !== user.uid);
+
+        await updateDoc(docRef, {
+          memberIds: newMemberIds,
+          admins: newAdmins,
+          coAdmins: newCoAdmins,
+          updated_at: new Date().toISOString()
+        });
+
+        toast.success("You left the group");
+        setShowUserProfile(false);
+        navigate('/');
+      }
+    } catch (err) {
+      console.error("Error leaving group:", err);
+      toast.error("Failed to leave group");
+    }
+  };
+
+  const handleRemoveUser = async (memberId: string, memberName: string) => {
+    if (!conversationId || !user) return;
+    if (!window.confirm(`Are you sure you want to remove ${memberName} from this group?`)) return;
+
+    try {
+      const { db } = await import('../lib/firebase');
+      const { doc, getDoc, updateDoc } = await import('firebase/firestore');
+      
+      const docRef = doc(db, 'conversations', conversationId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const currentMemberIds = data.memberIds || [];
+        const newMemberIds = currentMemberIds.filter((id: string) => id !== memberId);
+        const newAdmins = (data.admins || []).filter((id: string) => id !== memberId);
+        const newCoAdmins = (data.coAdmins || []).filter((id: string) => id !== memberId);
+
+        await updateDoc(docRef, {
+          memberIds: newMemberIds,
+          admins: newAdmins,
+          coAdmins: newCoAdmins,
+          updated_at: new Date().toISOString()
+        });
+
+        toast.success(`${memberName} has been removed`);
+        if (localConversation) {
+          setLocalConversation({
+            ...localConversation,
+            members: localConversation.members.filter((m: any) => m.id !== memberId)
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error removing user:", err);
+      toast.error("Failed to remove user");
+    }
+  };
+
+  const handleMakeCoAdmin = async (memberId: string, memberName: string) => {
+    if (!conversationId || !user) return;
+    if (!window.confirm(`Are you sure you want to make ${memberName} a Co-Admin?`)) return;
+
+    try {
+      const { db } = await import('../lib/firebase');
+      const { doc, getDoc, updateDoc } = await import('firebase/firestore');
+      
+      const docRef = doc(db, 'conversations', conversationId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const currentCoAdmins = data.coAdmins || [];
+        if (currentCoAdmins.includes(memberId)) {
+          toast.error("User is already a Co-Admin");
+          return;
+        }
+
+        const newCoAdmins = [...currentCoAdmins, memberId];
+        await updateDoc(docRef, {
+          coAdmins: newCoAdmins,
+          updated_at: new Date().toISOString()
+        });
+
+        toast.success(`${memberName} is now a Co-Admin`);
+      }
+    } catch (err) {
+      console.error("Error making co-admin:", err);
+      toast.error("Failed to update user role");
+    }
+  };
+
+  const handleUpdateGroupImage = async (file: File) => {
+    if (!conversationId) return;
+    try {
+      toast.loading("Compressing and updating group image...", { id: "groupImg" });
+      const compressed = await compressImage(file);
+      
+      const { db } = await import('../lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      
+      const docRef = doc(db, 'conversations', conversationId);
+      await updateDoc(docRef, {
+        avatar_url: compressed,
+        updated_at: new Date().toISOString()
+      });
+      
+      toast.success("Group image updated!", { id: "groupImg" });
+    } catch (err) {
+      console.error("Error updating group image:", err);
+      toast.error("Failed to update group image", { id: "groupImg" });
+    }
+  };
+
   useEffect(() => {
     if (!conversationId) return;
     fetchConversations();
@@ -183,6 +335,12 @@ export default function ChatScreen() {
   useEffect(() => {
     scrollToBottom();
   }, [chatMessages.length]);
+
+  useEffect(() => {
+    if (!conversationId) return;
+    localStorage.setItem(`last_read_${conversationId}`, new Date().toISOString());
+    window.dispatchEvent(new Event('chat_marked_read'));
+  }, [conversationId, chatMessages.length]);
 
    const scrollToBottom = () => {
     setTimeout(() => {
@@ -484,20 +642,20 @@ export default function ChatScreen() {
             
             <button 
               onClick={() => setShowUserProfile(true)}
-              className="flex items-center gap-3 text-left transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 p-1.5 -ml-1.5 rounded-xl"
+              className="flex items-center gap-3 text-left transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 p-1.5 -ml-1.5 rounded-xl min-w-0 max-w-[calc(100vw-180px)] sm:max-w-md"
             >
-              <Avatar src={otherMember?.avatar_url} online={isOnline} size="md" />
-              <div className="flex flex-col">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">{otherMember?.display_name}</span>
+              <Avatar src={otherMember?.avatar_url} online={isOnline} size="md" className="shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{otherMember?.display_name}</span>
                   {isSelf && (
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500 text-white uppercase tracking-wider">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500 text-white uppercase tracking-wider shrink-0">
                       You
                     </span>
                   )}
-                  {isMuted && <VolumeX size={14} className="text-zinc-400" />}
+                  {isMuted && <VolumeX size={14} className="text-zinc-400 shrink-0" />}
                 </div>
-                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate block">
                   {getPresenceText()}
                 </span>
               </div>
@@ -771,16 +929,24 @@ export default function ChatScreen() {
           })
         )}
         
-        {isTyping && (
-          <div className="flex items-start animate-in fade-in duration-200">
-            <div className="bg-white border border-zinc-100 dark:bg-zinc-900 dark:border-zinc-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm inline-flex items-center gap-1.5">
-              <span className="text-xs text-zinc-400 font-medium mr-1">typing</span>
-              <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        {typingUsers.map((typingUser) => (
+          <div key={typingUser.id} className="flex items-end gap-2.5 mb-3 animate-in fade-in duration-200">
+            <Avatar src={typingUser.avatar_url} size="xs" className="shrink-0 mb-0.5 shadow-sm" />
+            <div className="flex flex-col max-w-[70%]">
+              {isGroupOrCommunity && (
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 ml-1.5 font-semibold mb-0.5">
+                  {typingUser.display_name}
+                </span>
+              )}
+              <div className="bg-white border border-zinc-150 dark:bg-zinc-900 dark:border-zinc-800 rounded-2xl rounded-bl-sm px-3.5 py-2 shadow-sm inline-flex items-center gap-1.5 w-fit">
+                <span className="text-xs text-zinc-400 font-medium mr-1">typing</span>
+                <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
             </div>
           </div>
-        )}
+        ))}
         <div ref={bottomRef} />
       </div>
 
@@ -1177,7 +1343,29 @@ export default function ChatScreen() {
             </div>
             
             <div className="flex flex-col items-center flex-1 overflow-y-auto pr-1">
-              <Avatar src={otherMember.avatar_url} online={!otherMember.isGroup && isOnline} size="2xl" className="mb-4 shadow-md" />
+              {otherMember.isGroup ? (
+                <div className="relative group/avatar mb-4 cursor-pointer">
+                  <Avatar src={otherMember.avatar_url} size="2xl" className="shadow-md" />
+                  <label 
+                    htmlFor="group-avatar-update-input" 
+                    className="absolute inset-0 bg-black/50 text-white rounded-full flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 cursor-pointer transition-opacity text-xs font-semibold text-center p-2"
+                  >
+                    Change Image
+                  </label>
+                  <input 
+                    type="file" 
+                    id="group-avatar-update-input" 
+                    accept="image/*" 
+                    className="hidden" 
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleUpdateGroupImage(file);
+                    }}
+                  />
+                </div>
+              ) : (
+                <Avatar src={otherMember.avatar_url} online={!otherMember.isGroup && isOnline} size="2xl" className="mb-4 shadow-md" />
+              )}
               <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-1 text-center">
                 {otherMember.display_name}
               </h2>
@@ -1190,7 +1378,7 @@ export default function ChatScreen() {
                     : isOnline 
                       ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-400" 
                       : getPresenceText().includes('Sleeping')
-                        ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400"
+                        ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300"
                         : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
                 )}>
                   {!otherMember.isGroup && isOnline && (
@@ -1210,7 +1398,7 @@ export default function ChatScreen() {
                     <span className="text-zinc-900 dark:text-zinc-100 text-sm leading-relaxed">{otherMember.bio}</span>
                   </div>
                 )}
-
+ 
                 {/* For groups and communities: Render members with roles */}
                 {otherMember.isGroup && (
                   <div className="space-y-3 w-full">
@@ -1219,11 +1407,12 @@ export default function ChatScreen() {
                         Members ({otherMember.membersList?.length || 0})
                       </span>
                     </div>
-
+ 
                     <div className="max-h-48 overflow-y-auto space-y-2 pr-1 border border-zinc-100 dark:border-zinc-800 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/50">
                       {otherMember.membersList?.map((member: any) => {
                         const isAdmin = otherMember.admins?.includes(member.id);
                         const isCoAdmin = otherMember.coAdmins?.includes(member.id);
+                        const isCurrentUserAdmin = otherMember.admins?.includes(user?.uid);
 
                         return (
                           <div key={member.id} className="flex items-center justify-between gap-2 p-1">
@@ -1233,16 +1422,16 @@ export default function ChatScreen() {
                                 {member.display_name}
                               </span>
                             </div>
-
-                            {/* Role badges */}
-                            <div className="shrink-0 flex gap-1">
+ 
+                            {/* Role badges and Actions */}
+                            <div className="shrink-0 flex items-center gap-1.5">
                               {isAdmin ? (
                                 <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
                                   <Shield size={10} className="fill-current" />
                                   Admin
                                 </span>
                               ) : isCoAdmin ? (
-                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300">
                                   <ShieldCheck size={10} />
                                   Co-Admin
                                 </span>
@@ -1250,6 +1439,32 @@ export default function ChatScreen() {
                                 <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                                   Member
                                 </span>
+                              )}
+
+                              {/* Admin Actions on this member */}
+                              {isCurrentUserAdmin && member.id !== user?.uid && (
+                                <div className="flex gap-1 pl-1 border-l border-zinc-200 dark:border-zinc-800">
+                                  {!isAdmin && !isCoAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleMakeCoAdmin(member.id, member.display_name)}
+                                      title="Promote to Co-Admin"
+                                      className="p-1 text-zinc-400 hover:text-indigo-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                                    >
+                                      <Award size={14} />
+                                    </button>
+                                  )}
+                                  {!isAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveUser(member.id, member.display_name)}
+                                      title="Remove from Group"
+                                      className="p-1 text-zinc-400 hover:text-red-500 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                                    >
+                                      <Trash size={14} />
+                                    </button>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </div>
@@ -1266,6 +1481,28 @@ export default function ChatScreen() {
                   </div>
                 )}
                 
+                {!otherMember.isGroup && otherMember.gender && (
+                  <div className="flex flex-col gap-1 pt-1">
+                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Gender</span>
+                    <span className="text-zinc-900 dark:text-zinc-100 text-sm capitalize">{otherMember.gender}</span>
+                  </div>
+                )}
+                
+                {!otherMember.isGroup && otherMember.dob && (
+                  <div className="flex flex-col gap-1 pt-1">
+                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Date of Birth</span>
+                    <span className="text-zinc-900 dark:text-zinc-100 text-sm">
+                      {(() => {
+                        try {
+                          return format(new Date(otherMember.dob), 'MMMM d, yyyy');
+                        } catch (e) {
+                          return otherMember.dob;
+                        }
+                      })()}
+                    </span>
+                  </div>
+                )}
+                
                 {!otherMember.isGroup && (
                   <div className="flex flex-col gap-1 pt-1">
                     <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Member Since</span>
@@ -1279,12 +1516,20 @@ export default function ChatScreen() {
             
             <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
               {otherMember.isGroup ? (
-                <button
-                  onClick={() => setShowUserProfile(false)}
-                  className="w-full rounded-2xl bg-zinc-100 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
-                >
-                  Close Info
-                </button>
+                <div className="flex flex-col gap-2 w-full">
+                  <button
+                    onClick={handleLeaveGroup}
+                    className="w-full rounded-2xl bg-red-50 text-red-600 py-3 text-sm font-semibold transition-colors hover:bg-red-100 dark:bg-red-950/20 dark:text-red-400 dark:hover:bg-red-950/40"
+                  >
+                    Leave Group
+                  </button>
+                  <button
+                    onClick={() => setShowUserProfile(false)}
+                    className="w-full rounded-2xl bg-zinc-100 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+                  >
+                    Close Info
+                  </button>
+                </div>
               ) : (
                 <div className="flex gap-3">
                   <button

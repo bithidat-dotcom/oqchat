@@ -36,9 +36,23 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     return localStorage.getItem('setting_passcode_lock') === 'true';
   });
 
-  const [msgSounds, setMsgSounds] = useState(true);
-  const [callAlerts, setCallAlerts] = useState(true);
+  const [msgSounds, setMsgSounds] = useState(() => {
+    return localStorage.getItem('setting_msg_sounds') !== 'false';
+  });
+  const [callAlerts, setCallAlerts] = useState(() => {
+    return localStorage.getItem('setting_call_alerts') !== 'false';
+  });
   const [desktopPush, setDesktopPush] = useState(true);
+
+  const [msgSoundType, setMsgSoundType] = useState(() => {
+    return localStorage.getItem('setting_msg_sound_type') || 'standard';
+  });
+
+  const [ringtoneType, setRingtoneType] = useState(() => {
+    return localStorage.getItem('setting_ringtone_type') || 'classic';
+  });
+
+  const [isPlayingRingtone, setIsPlayingRingtone] = useState(false);
 
   const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
     const val = localStorage.getItem('setting_blocked_users');
@@ -75,6 +89,20 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     return () => mediaQuery.removeEventListener('change', listener);
   }, [systemTheme]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      import('../../lib/audioManager').then(({ stopRingtoneSound }) => {
+        stopRingtoneSound();
+      });
+      setIsPlayingRingtone(false);
+    }
+    return () => {
+      import('../../lib/audioManager').then(({ stopRingtoneSound }) => {
+        stopRingtoneSound();
+      });
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -163,13 +191,6 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           <section>
             <h3 className="px-2 text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-2">Preferences</h3>
             <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 overflow-hidden dark:bg-zinc-900 dark:ring-zinc-800">
-              <SettingsRow icon={Moon} label="Toggle Dark Mode" onClick={toggleTheme} />
-              <SettingsToggleRow 
-                icon={Monitor} 
-                label="System Theme Sync" 
-                checked={systemTheme} 
-                onChange={toggleSystemTheme} 
-              />
               <SettingsRow 
                 icon={Bell} 
                 label="Notifications & Sounds" 
@@ -366,8 +387,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 label="Message Sound Alerts" 
                 checked={msgSounds} 
                 onChange={() => {
-                  setMsgSounds(!msgSounds);
-                  toast.success(!msgSounds ? 'Message sound enabled' : 'Message sound muted');
+                  const next = !msgSounds;
+                  setMsgSounds(next);
+                  localStorage.setItem('setting_msg_sounds', String(next));
+                  toast.success(next ? 'Message sound enabled' : 'Message sound muted');
+                  if (next) {
+                    import('../../lib/audioManager').then(({ playNotificationSound }) => {
+                      playNotificationSound(msgSoundType as any);
+                    });
+                  }
                 }} 
               />
               <SettingsToggleRow 
@@ -375,8 +403,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 label="In-App Call Ringing" 
                 checked={callAlerts} 
                 onChange={() => {
-                  setCallAlerts(!callAlerts);
-                  toast.success(!callAlerts ? 'Call ringtone enabled' : 'Call ringtone muted');
+                  const next = !callAlerts;
+                  setCallAlerts(next);
+                  localStorage.setItem('setting_call_alerts', String(next));
+                  toast.success(next ? 'Call ringtone enabled' : 'Call ringtone muted');
                 }} 
               />
               <SettingsToggleRow 
@@ -388,6 +418,90 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   toast.success(!desktopPush ? 'Push notifications enabled' : 'Push notifications disabled');
                 }} 
               />
+            </div>
+
+            {/* Premium Message Notification Sound Picker */}
+            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800 space-y-3">
+              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Message Notification Tone</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {(['standard', 'chime', 'digital', 'bubble'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setMsgSoundType(type);
+                      localStorage.setItem('setting_msg_sound_type', type);
+                      import('../../lib/audioManager').then(({ playNotificationSound }) => {
+                        playNotificationSound(type);
+                      });
+                    }}
+                    className={`px-3 py-2.5 rounded-xl border text-sm font-medium capitalize transition-all ${
+                      msgSoundType === type
+                        ? 'border-brand-500 bg-brand-50/50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400'
+                        : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  import('../../lib/audioManager').then(({ playNotificationSound }) => {
+                    playNotificationSound(msgSoundType as any);
+                  });
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-zinc-100 py-2.5 text-xs font-bold text-zinc-700 hover:bg-zinc-200 transition-colors dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+              >
+                <span>🔊 Preview System Alert ({msgSoundType})</span>
+              </button>
+            </div>
+
+            {/* Premium Call Ringtone Picker */}
+            <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800 space-y-3">
+              <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">In-App Call Ringtone</h4>
+              <div className="grid grid-cols-2 gap-2">
+                {(['classic', 'marimba', 'melody', 'electronic'] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setRingtoneType(type);
+                      localStorage.setItem('setting_ringtone_type', type);
+                      if (isPlayingRingtone) {
+                        import('../../lib/audioManager').then(({ startRingtoneSound }) => {
+                          startRingtoneSound(type);
+                        });
+                      }
+                    }}
+                    className={`px-3 py-2.5 rounded-xl border text-sm font-medium capitalize transition-all ${
+                      ringtoneType === type
+                        ? 'border-brand-500 bg-brand-50/50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-400'
+                        : 'border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  const targetState = !isPlayingRingtone;
+                  setIsPlayingRingtone(targetState);
+                  import('../../lib/audioManager').then(({ startRingtoneSound, stopRingtoneSound }) => {
+                    if (targetState) {
+                      startRingtoneSound(ringtoneType as any);
+                    } else {
+                      stopRingtoneSound();
+                    }
+                  });
+                }}
+                className={`w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-colors ${
+                  isPlayingRingtone
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                }`}
+              >
+                <span>{isPlayingRingtone ? '⏹️ Stop Ringing Sound' : `🎵 Preview Ringtone (${ringtoneType})`}</span>
+              </button>
             </div>
           </div>
         </div>

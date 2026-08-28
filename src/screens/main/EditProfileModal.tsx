@@ -6,6 +6,8 @@ import { useAuthStore } from '../../store/authStore';
 import toast from 'react-hot-toast';
 import { Avatar } from '../../components/ui/Avatar';
 import { compressImage } from '../../lib/imageUtils';
+import { DatePicker } from '../../components/ui/DatePicker';
+import { cn } from '../../lib/utils';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -18,6 +20,8 @@ export default function EditProfileModal({ isOpen, onClose }: EditProfileModalPr
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
+  const [gender, setGender] = useState('');
+  const [dob, setDob] = useState('');
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,6 +31,8 @@ export default function EditProfileModal({ isOpen, onClose }: EditProfileModalPr
       setUsername(profile.username || '');
       setBio(profile.bio || '');
       setAvatarUrl(profile.avatar_url || '');
+      setGender(profile.gender || '');
+      setDob(profile.dob || '');
     }
   }, [isOpen, profile]);
 
@@ -50,7 +56,9 @@ export default function EditProfileModal({ isOpen, onClose }: EditProfileModalPr
         display_name: displayName,
         username: username.toLowerCase(),
         bio: bio,
-        avatar_url: avatarUrl || null
+        avatar_url: avatarUrl || null,
+        gender: gender || null,
+        dob: dob || null
       });
       toast.success('Profile updated successfully');
       onClose();
@@ -122,6 +130,35 @@ export default function EditProfileModal({ isOpen, onClose }: EditProfileModalPr
             required
             maxLength={20}
           />
+          <div className="w-full">
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
+              Gender
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {['Male', 'Female', 'Other'].map((g) => (
+                <button
+                  type="button"
+                  key={g}
+                  onClick={() => setGender(g)}
+                  className={cn(
+                    "py-2.5 rounded-xl text-sm font-semibold transition-all border",
+                    gender === g
+                      ? "bg-brand-500 border-brand-500 text-white shadow-sm"
+                      : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 dark:bg-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                  )}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <DatePicker
+            label="Date of Birth"
+            value={dob}
+            onChange={setDob}
+          />
+
           <div className="w-full">
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-1.5">
               Bio

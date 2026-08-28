@@ -32,30 +32,55 @@ export default function ChatsListScreen() {
   const [selectedConv, setSelectedConv] = useState<{ conv: Conversation; targetUser: any } | null>(null);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [readTrigger, setReadTrigger] = React.useState(0);
+
   useEffect(() => {
     fetchConversations();
+    const handleUpdate = () => setReadTrigger(prev => prev + 1);
+    window.addEventListener('chat_marked_read', handleUpdate);
+    return () => window.removeEventListener('chat_marked_read', handleUpdate);
   }, []);
 
-  // Filter conversations where the current user is a member
+  // Filter conversations where the current user is a member and deduplicate self chats
   const myConversations = React.useMemo(() => {
-    return conversations.filter(c => 
-      c.members.some(m => m.id === user?.uid)
-    );
-  }, [conversations, user?.uid]);
+    let seenSelfChat = false;
+    return conversations.filter(c => {
+      const isMember = c.members.some(m => m.id === user?.uid);
+      if (!isMember) return false;
+      const isSelf = c.type === 'direct' && (c.members.length === 1 || c.members.every(m => m.id === user?.uid));
+      if (isSelf) {
+        if (seenSelfChat) return false;
+        seenSelfChat = true;
+      }
+      return true;
+    });
+  }, [conversations, user?.uid, readTrigger]);
 
   const filteredConversations = React.useMemo(() => {
-    return myConversations.filter(c => {
-      const isSelf = c.members.length === 1 || c.members.every(m => m.id === user?.uid);
-      const otherMember = isSelf ? currentUserProfile : (c.members.find(m => m.id !== user?.uid) || c.members[0]);
-      if (!otherMember) return false;
+    const list = myConversations.filter(c => {
+      const isGroupOrCommunity = c.type === 'group' || c.type === 'community';
+      const isSelf = !isGroupOrCommunity && (c.members.length === 1 || c.members.every(m => m.id === user?.uid));
+      const targetName = isGroupOrCommunity
+        ? (c.name || (c.type === 'group' ? 'Group Chat' : 'Community'))
+        : (isSelf ? currentUserProfile?.display_name : (c.members.find(m => m.id !== user?.uid) || c.members[0])?.display_name || 'Unknown');
+      
+      if (!targetName) return false;
       if (!search.trim()) return true;
-      return (
-        otherMember.display_name.toLowerCase().includes(search.toLowerCase()) ||
-        otherMember.username.toLowerCase().includes(search.toLowerCase()) ||
-        (isSelf && 'you message yourself'.includes(search.toLowerCase()))
-      );
+      return targetName.toLowerCase().includes(search.toLowerCase());
     });
-  }, [myConversations, currentUserProfile, user?.uid, search]);
+
+    return [...list].sort((a, b) => {
+      const aMsgs = messages[a.id] || [];
+      const bMsgs = messages[b.id] || [];
+      const aLastMsg = aMsgs.length > 0 ? aMsgs[aMsgs.length - 1] : null;
+      const bLastMsg = bMsgs.length > 0 ? bMsgs[bMsgs.length - 1] : null;
+      
+      const aTime = aLastMsg ? new Date(aLastMsg.created_at).getTime() : new Date(a.updated_at || a.created_at || 0).getTime();
+      const bTime = bLastMsg ? new Date(bLastMsg.created_at).getTime() : new Date(b.updated_at || b.created_at || 0).getTime();
+      
+      return bTime - aTime;
+    });
+  }, [myConversations, currentUserProfile, user?.uid, search, messages]);
 
   const [allUsers, setAllUsers] = useState<any[]>([]);
 
@@ -96,13 +121,15 @@ export default function ChatsListScreen() {
     const isSelf = targetUserId === currentUserProfile.id;
 
     // Check if conversation already exists
-    const existingConv = conversations.find(c => 
-      c.type === 'direct' && (
-        isSelf 
-          ? c.members.length === 1 || (c.members.length === 2 && c.members[0].id === currentUserProfile.id && c.members[1].id === currentUserProfile.id)
-          : c.members.some(m => m.id === targetUserId) && c.members.some(m => m.id !== currentUserProfile.id)
-      )
-    );
+    const existingConv = conversations.find(c => {
+      if (c.type !== 'direct') return false;
+      const cIsSelf = c.members.length === 1 || c.members.every(m => m.id === user?.uid);
+      if (isSelf) {
+        return cIsSelf;
+      } else {
+        return !cIsSelf && c.members.some(m => m.id === targetUserId);
+      }
+    });
 
     if (existingConv) {
       setSearch('');
@@ -289,9 +316,22 @@ export default function ChatsListScreen() {
                         <span className="text-sm text-zinc-500 truncate dark:text-zinc-400">
                           {lastMsgText}
                         </span>
-                        {isUnread && (
-                          <span className="h-2.5 w-2.5 rounded-full bg-brand-500 shrink-0 ml-2 animate-pulse" />
-                        )}
+                        {(() => {
+                          const lastReadStr = localStorage.getItem(`last_read_${conv.id}`);
+                          const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+                          const unreadMsgs = chatMsgs.filter(m => m.sender_id !== user?.uid && new Date(m.created_at).getTime() > lastReadTime);
+                          let unreadCount = unreadMsgs.length;
+                          if (isUnread && unreadCount === 0) {
+                            unreadCount = 1;
+                          }
+                          if (unreadCount === 0) return null;
+                          const unreadDisplay = unreadCount >= 4 ? '4+' : String(unreadCount);
+                          return (
+                            <span className="flex items-center justify-center min-w-[20px] h-5 rounded-full bg-brand-500 text-[10px] font-bold text-white px-1.5 shrink-0 ml-2 animate-pulse">
+                              {unreadDisplay}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </div>
                   </button>
