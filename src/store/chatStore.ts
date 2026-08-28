@@ -4,7 +4,7 @@ import { collection, doc, setDoc, onSnapshot, query, where, orderBy, getDocs, de
 import { useAuthStore } from './authStore';
 import { encryptText, decryptText } from '../lib/encryption';
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'poll';
 
 export interface Message {
   id: string;
@@ -22,7 +22,7 @@ export interface Message {
 
 export interface Conversation {
   id: string;
-  type: 'direct' | 'group';
+  type: 'direct' | 'group' | 'community';
   created_at: string;
   updated_at: string;
   members: any[];

@@ -4,11 +4,12 @@ import { useChatStore, Message } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../components/ui/Avatar';
-import { ChevronLeft, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, AlertCircle } from 'lucide-react';
+import { ChevronLeft, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import toast from 'react-hot-toast';
 import { compressImage } from '../lib/imageUtils';
+import { encryptText, decryptText } from '../lib/encryption';
 
 const EMOJI_LIST = ['😊', '😂', '❤️', '👍', '🔥', '🎉', '🚀', '😍', '😭', '🙏', '✨', '😎', '💬', '📱', '💡', '🥳', '👏', '💯', '🌟', '🍕', '☕', '🎧', '🎁', '⚽', '📸', '🔑', '🏆', '📌', '💙', '🟢'];
 
@@ -42,6 +43,9 @@ export default function ChatScreen() {
   // Reply state
   const [replyToMsg, setReplyToMsg] = useState<Message | null>(null);
 
+  // Selected image preview state before sending
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
   // Forward Modal state
   const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
 
@@ -51,6 +55,11 @@ export default function ChatScreen() {
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  // Poll creation state
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
 
   // Playing audio message state
   const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
@@ -112,17 +121,35 @@ export default function ChatScreen() {
     ? rawMessages.filter(m => m.content && m.content.toLowerCase().includes(searchQuery.toLowerCase()))
     : rawMessages;
 
-  const isSelf = conversation?.members.length === 1 || conversation?.members.every(m => m.id === user?.uid);
-  const otherMember = isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]);
-  const isOnline = isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false);
+  const isGroupOrCommunity = conversation?.type === 'group' || conversation?.type === 'community';
+  const isSelf = !isGroupOrCommunity && (conversation?.members.length === 1 || conversation?.members.every(m => m.id === user?.uid));
+  const otherMember = isGroupOrCommunity
+    ? {
+        id: conversation.id,
+        display_name: conversation.name || (conversation.type === 'group' ? 'Group Chat' : 'Community'),
+        avatar_url: conversation.avatar_url || '',
+        is_online: false,
+        bio: conversation.description || 'Welcome to this chat space!',
+        isGroup: true,
+        type: conversation.type,
+        admins: conversation.admins || [],
+        coAdmins: conversation.coAdmins || [],
+        membersList: conversation.members || []
+      }
+    : (isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]));
+  const isOnline = isGroupOrCommunity ? false : (isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false));
   
   // Guard otherTypingTimestamp so we never check our own typing state
-  const otherTypingTimestamp = (otherMember && otherMember.id !== user?.uid) 
+  const otherTypingTimestamp = (otherMember && otherMember.id !== user?.uid && !isGroupOrCommunity) 
     ? (conversation?.typing?.[otherMember.id] || null) 
     : null;
   const isTyping = otherTypingTimestamp ? (time - otherTypingTimestamp < 3000) : false;
 
   const getPresenceText = () => {
+    if (isGroupOrCommunity) {
+      const typeLabel = conversation?.type === 'group' ? 'Group Chat' : 'Community';
+      return `${conversation?.members?.length || 0} members • ${typeLabel}`;
+    }
     if (isSelf) return 'Message yourself (Notes, links, media)';
     if (isTyping) return 'typing...';
     
@@ -157,10 +184,88 @@ export default function ChatScreen() {
     scrollToBottom();
   }, [chatMessages.length]);
 
-  const scrollToBottom = () => {
+   const scrollToBottom = () => {
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
+  };
+
+  const handleVote = async (msg: Message, optionIndex: string) => {
+    if (!conversationId || !user) return;
+    try {
+      let pollData;
+      try {
+        pollData = JSON.parse(msg.content || '{}');
+      } catch (err) {
+        return;
+      }
+      
+      if (!pollData.votes) {
+        pollData.votes = {};
+      }
+      
+      if (!pollData.votes[optionIndex]) {
+        pollData.votes[optionIndex] = [];
+      }
+      
+      const currentVotes = pollData.votes[optionIndex] as string[];
+      if (currentVotes.includes(user.uid)) {
+        pollData.votes[optionIndex] = currentVotes.filter(uid => uid !== user.uid);
+      } else {
+        // Toggle on
+        pollData.votes[optionIndex] = [...currentVotes, user.uid];
+      }
+      
+      const updatedJson = JSON.stringify(pollData);
+      const encryptedJson = await encryptText(updatedJson, conversationId);
+      
+      const { db } = await import('../lib/firebase');
+      const { doc, updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'conversations', conversationId, 'messages', msg.id), {
+        content: encryptedJson,
+        updated_at: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Error voting on poll:", err);
+    }
+  };
+
+  const handleCreatePoll = async () => {
+    if (!pollQuestion.trim()) {
+      toast.error("Please enter a question");
+      return;
+    }
+    const filteredOptions = pollOptions.map(o => o.trim()).filter(Boolean);
+    if (filteredOptions.length < 2) {
+      toast.error("Please provide at least 2 options");
+      return;
+    }
+    
+    if (!conversationId) return;
+
+    try {
+      const pollData = {
+        question: pollQuestion.trim(),
+        options: filteredOptions,
+        votes: filteredOptions.reduce((acc, _, idx) => {
+          acc[idx] = [];
+          return acc;
+        }, {} as Record<number, string[]>)
+      };
+
+      const pollJson = JSON.stringify(pollData);
+      
+      await sendMessage(conversationId, pollJson, 'poll');
+      
+      // Reset
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setShowPollCreator(false);
+      toast.success("Poll created successfully!");
+    } catch (err) {
+      console.error("Error creating poll:", err);
+      toast.error("Failed to create poll");
+    }
   };
 
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -253,6 +358,25 @@ export default function ChatScreen() {
       return;
     }
 
+    if (selectedImage && conversationId) {
+      setIsSendingMedia(true);
+      try {
+        const text = content.trim();
+        const replyId = replyToMsg ? replyToMsg.id : null;
+        setContent('');
+        setReplyToMsg(null);
+        setSelectedImage(null);
+        await sendMessage(conversationId, text, 'image', selectedImage, replyId);
+        scrollToBottom();
+        toast.success('Image sent');
+      } catch (error) {
+        toast.error('Failed to send image');
+      } finally {
+        setIsSendingMedia(false);
+      }
+      return;
+    }
+
     if (!content.trim() || !conversationId) {
       if (!content.trim()) {
         startVoiceRecording();
@@ -299,6 +423,12 @@ export default function ChatScreen() {
   // Handle Save Edited Message
   const handleSaveEdit = () => {
     if (!conversationId || !editingMsg) return;
+    const messageAgeMs = new Date().getTime() - new Date(editingMsg.created_at).getTime();
+    if (messageAgeMs > 30 * 60 * 1000) {
+      toast.error('Messages can only be edited within 30 minutes of sending');
+      setEditingMsg(null);
+      return;
+    }
     if (!editText.trim()) {
       toast.error('Message content cannot be empty');
       return;
@@ -375,20 +505,24 @@ export default function ChatScreen() {
           </div>
 
           <div className="flex items-center gap-1">
-            <button 
-              onClick={() => handleCall('voice')}
-              title={isSelf ? "Call yourself" : "Voice call"}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
-            >
-              <Phone size={20} />
-            </button>
-            <button 
-              onClick={() => handleCall('video')}
-              title={isSelf ? "Video call yourself" : "Video call"}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
-            >
-              <Video size={22} />
-            </button>
+            {!isGroupOrCommunity && (
+              <>
+                <button 
+                  onClick={() => handleCall('voice')}
+                  title={isSelf ? "Call yourself" : "Voice call"}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                >
+                  <Phone size={20} />
+                </button>
+                <button 
+                  onClick={() => handleCall('video')}
+                  title={isSelf ? "Video call yourself" : "Video call"}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+                >
+                  <Video size={22} />
+                </button>
+              </>
+            )}
             
             <div className="relative">
               <button 
@@ -536,6 +670,92 @@ export default function ChatScreen() {
                         <span className="text-[10px] opacity-80">{msg.content || 'MP3 Voice note'}</span>
                       </div>
                     </div>
+                  ) : msg.message_type === 'poll' ? (
+                    (() => {
+                      let pollData: any = null;
+                      try {
+                        pollData = JSON.parse(msg.content || '{}');
+                      } catch (e) {
+                        return <p className="text-sm italic text-red-400">Malformed Poll</p>;
+                      }
+                      if (!pollData) return null;
+
+                      const votesMap = pollData.votes || {};
+                      const totalVotes = Object.values(votesMap).reduce((acc: number, arr: any) => acc + (arr?.length || 0), 0) as number;
+
+                      return (
+                        <div className="w-64 sm:w-72 p-1 text-zinc-900 dark:text-zinc-50">
+                          <h4 className="font-bold text-sm sm:text-base mb-3 leading-snug">{pollData.question}</h4>
+                          <div className="space-y-2.5">
+                            {pollData.options.map((opt: string, idx: number) => {
+                              const optionIdxStr = String(idx);
+                              const optionVoters = votesMap[optionIdxStr] || [];
+                              const userVoted = optionVoters.includes(user?.uid);
+                              const percentage = totalVotes > 0 ? Math.round((optionVoters.length / totalVotes) * 100) : 0;
+
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleVote(msg, optionIdxStr);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left relative rounded-xl border p-2.5 transition-all overflow-hidden flex flex-col gap-1 hover:brightness-95 active:scale-[0.99]",
+                                    userVoted 
+                                      ? "border-brand-500 bg-brand-50/50 dark:bg-brand-950/20" 
+                                      : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+                                  )}
+                                >
+                                  <div 
+                                    className={cn(
+                                      "absolute inset-y-0 left-0 transition-all duration-500 pointer-events-none opacity-10",
+                                      userVoted ? "bg-brand-500" : "bg-zinc-400"
+                                    )} 
+                                    style={{ width: `${percentage}%` }}
+                                  />
+
+                                  <div className="flex items-center justify-between font-semibold text-xs sm:text-sm relative z-10">
+                                    <span className="truncate pr-2">{opt}</span>
+                                    <span className="text-zinc-500 dark:text-zinc-400 shrink-0 font-bold">{percentage}%</span>
+                                  </div>
+
+                                  <div className="flex items-center justify-between mt-1 relative z-10 h-5">
+                                    <span className="text-[10px] text-zinc-400 font-medium">
+                                      {optionVoters.length} {optionVoters.length === 1 ? 'vote' : 'votes'}
+                                    </span>
+
+                                    {optionVoters.length > 0 && (
+                                      <div className="flex items-center">
+                                        {optionVoters.map((voterId: string) => {
+                                          const memberObj = conversation?.members?.find((m: any) => m.id === voterId);
+                                          return (
+                                            <div 
+                                              key={voterId} 
+                                              title={memberObj?.display_name || 'Voter'}
+                                              className="h-4.5 w-4.5 rounded-full border border-white dark:border-zinc-900 overflow-hidden bg-zinc-200 -ml-1.5 first:ml-0 shadow-sm shrink-0"
+                                            >
+                                              <img 
+                                                src={memberObj?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50'} 
+                                                alt="voter" 
+                                                className="h-full w-full object-cover" 
+                                              />
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <p className="text-[10px] text-zinc-400 font-medium mt-3 text-right">
+                            Total: {totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}
+                          </p>
+                        </div>
+                      );
+                    })()
                   ) : (
                     <p className="break-words">{msg.content}</p>
                   )}
@@ -606,6 +826,29 @@ export default function ChatScreen() {
           </div>
         )}
 
+        {/* Selected Image Preview */}
+        {selectedImage && (
+          <div className="mb-2 p-2 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between animate-in fade-in duration-150">
+            <div className="flex items-center gap-3">
+              <div className="relative h-14 w-14 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 shrink-0">
+                <img src={selectedImage} alt="Selected preview" className="h-full w-full object-cover" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Image selected</span>
+                <span className="text-[10px] text-zinc-400 truncate">Ready to send with Send button</span>
+              </div>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setSelectedImage(null)} 
+              className="p-1.5 text-zinc-400 hover:text-red-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
+              title="Remove image"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
         {isRecording ? (
           <div className="flex items-center justify-between bg-red-50 dark:bg-red-500/10 rounded-2xl p-2 px-4 border border-red-200 dark:border-red-500/20 animate-in fade-in duration-200">
             <div className="flex items-center gap-3">
@@ -648,11 +891,10 @@ export default function ChatScreen() {
                   setIsSendingMedia(true);
                   try {
                     const compressed = await compressImage(file);
-                    await sendMessage(conversationId, '', 'image', compressed, replyToMsg ? replyToMsg.id : null);
-                    setReplyToMsg(null);
-                    toast.success('Image sent');
+                    setSelectedImage(compressed);
+                    toast.success('Image loaded. Tap Send to share!');
                   } catch (error) {
-                    toast.error('Failed to send image');
+                    toast.error('Failed to select image');
                   } finally {
                     setIsSendingMedia(false);
                     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -675,13 +917,22 @@ export default function ChatScreen() {
                 <Paperclip size={20} />
               )}
             </button>
+
+            <button 
+              type="button" 
+              onClick={() => setShowPollCreator(true)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition-colors"
+              title="Create Poll"
+            >
+              <BarChart2 size={20} />
+            </button>
             
             <div className="relative flex-1">
               <input
                 type="text"
                 value={content}
                 onChange={handleTyping}
-                placeholder="Message..."
+                placeholder={selectedImage ? "Add a caption..." : "Message..."}
                 className="w-full rounded-2xl border-none bg-zinc-100 px-4 py-3 pr-10 text-base focus:ring-2 focus:ring-brand-500 dark:bg-zinc-900 dark:text-zinc-50"
               />
               <button 
@@ -696,12 +947,12 @@ export default function ChatScreen() {
               type="submit" 
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200",
-                content.trim() 
+                (content.trim() || selectedImage)
                   ? "bg-brand-500 text-white hover:bg-brand-600 shadow-sm shadow-brand-500/25" 
                   : "bg-brand-500 text-white hover:bg-brand-600 shadow-sm"
               )}
             >
-              {content.trim() ? <Send size={20} className="ml-1" /> : <Mic size={20} />}
+              {(content.trim() || selectedImage) ? <Send size={20} className="ml-0.5" /> : <Mic size={20} />}
             </button>
           </form>
         )}
@@ -748,23 +999,43 @@ export default function ChatScreen() {
               </div>
             </button>
 
-            {/* Edit Button (only for text messages sent by user) */}
-            {selectedMsg.message_type === 'text' && selectedMsg.sender_id === user?.uid && (
-              <button 
-                onClick={() => {
-                  setEditingMsg(selectedMsg);
-                  setEditText(selectedMsg.content || '');
-                  setSelectedMsg(null);
-                }}
-                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors text-left"
-              >
-                <Edit2 size={20} className="text-amber-500" />
-                <div className="flex flex-col">
-                  <span className="font-semibold text-sm">Edit Text Message</span>
-                  <span className="text-xs text-zinc-400">Update message content</span>
-                </div>
-              </button>
-            )}
+            {/* Edit Button (only for text messages sent by user within 30 minutes) */}
+            {(() => {
+              const messageAgeMs = selectedMsg ? (new Date().getTime() - new Date(selectedMsg.created_at).getTime()) : 0;
+              const isEditable = messageAgeMs < 30 * 60 * 1000;
+              
+              if (selectedMsg.message_type === 'text' && selectedMsg.sender_id === user?.uid) {
+                return (
+                  <button 
+                    disabled={!isEditable}
+                    onClick={() => {
+                      if (!isEditable) {
+                        toast.error('Messages can only be edited within 30 minutes of sending');
+                        return;
+                      }
+                      setEditingMsg(selectedMsg);
+                      setEditText(selectedMsg.content || '');
+                      setSelectedMsg(null);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-3 p-3 rounded-2xl transition-colors text-left",
+                      isEditable 
+                        ? "hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-900 dark:text-zinc-100" 
+                        : "opacity-50 cursor-not-allowed text-zinc-400"
+                    )}
+                  >
+                    <Edit2 size={20} className={cn(isEditable ? "text-amber-500" : "text-zinc-400")} />
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-sm">Edit Text Message</span>
+                      <span className="text-xs text-zinc-400">
+                        {isEditable ? "Update message content" : "Locked (older than 30 mins)"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              }
+              return null;
+            })()}
 
             {/* Delete Message Button */}
             <button 
@@ -892,9 +1163,11 @@ export default function ChatScreen() {
       {/* User Profile Modal */}
       {showUserProfile && otherMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Profile</h3>
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center mb-6 shrink-0">
+              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+                {otherMember.isGroup ? (otherMember.type === 'community' ? 'Community Info' : 'Group Info') : 'User Profile'}
+              </h3>
               <button 
                 onClick={() => setShowUserProfile(false)}
                 className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
@@ -903,72 +1176,223 @@ export default function ChatScreen() {
               </button>
             </div>
             
-            <div className="flex flex-col items-center">
-              <Avatar src={otherMember.avatar_url} online={isOnline} size="2xl" className="mb-4 shadow-md" />
-              <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-1">
+            <div className="flex flex-col items-center flex-1 overflow-y-auto pr-1">
+              <Avatar src={otherMember.avatar_url} online={!otherMember.isGroup && isOnline} size="2xl" className="mb-4 shadow-md" />
+              <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50 mb-1 text-center">
                 {otherMember.display_name}
               </h2>
               
               <div className="flex items-center gap-2 mb-6">
                 <span className={cn(
                   "flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium",
-                  isOnline 
+                  otherMember.isGroup 
                     ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-400" 
-                    : getPresenceText().includes('Sleeping')
-                      ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400"
-                      : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+                    : isOnline 
+                      ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-400" 
+                      : getPresenceText().includes('Sleeping')
+                        ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-400"
+                        : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
                 )}>
-                  {isOnline ? (
+                  {!otherMember.isGroup && isOnline && (
                     <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                  ) : getPresenceText().includes('Sleeping') ? (
+                  )}
+                  {!otherMember.isGroup && !isOnline && getPresenceText().includes('Sleeping') && (
                     <span>🌙</span>
-                  ) : null}
-                  {getPresenceText().replace('typing...', 'Online')}
+                  )}
+                  {otherMember.isGroup ? (otherMember.type === 'community' ? 'Community' : 'Group Chat') : getPresenceText().replace('typing...', 'Online')}
                 </span>
               </div>
               
-              <div className="w-full space-y-3 pt-4 border-t border-zinc-200 dark:border-zinc-800">
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Email</span>
-                  <span className="text-zinc-900 dark:text-zinc-100">{otherMember.email || 'Private'}</span>
-                </div>
-                
+              <div className="w-full space-y-4 pt-4 border-t border-zinc-200 dark:border-zinc-800">
                 {otherMember.bio && (
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">About</span>
                     <span className="text-zinc-900 dark:text-zinc-100 text-sm leading-relaxed">{otherMember.bio}</span>
                   </div>
                 )}
+
+                {/* For groups and communities: Render members with roles */}
+                {otherMember.isGroup && (
+                  <div className="space-y-3 w-full">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                        Members ({otherMember.membersList?.length || 0})
+                      </span>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1 border border-zinc-100 dark:border-zinc-800 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/50">
+                      {otherMember.membersList?.map((member: any) => {
+                        const isAdmin = otherMember.admins?.includes(member.id);
+                        const isCoAdmin = otherMember.coAdmins?.includes(member.id);
+
+                        return (
+                          <div key={member.id} className="flex items-center justify-between gap-2 p-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Avatar src={member.avatar_url} size="xs" />
+                              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                                {member.display_name}
+                              </span>
+                            </div>
+
+                            {/* Role badges */}
+                            <div className="shrink-0 flex gap-1">
+                              {isAdmin ? (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                                  <Shield size={10} className="fill-current" />
+                                  Admin
+                                </span>
+                              ) : isCoAdmin ? (
+                                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                                  <ShieldCheck size={10} />
+                                  Co-Admin
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                                  Member
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 
-                <div className="flex flex-col gap-1 pt-2">
-                  <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Member Since</span>
-                  <span className="text-zinc-900 dark:text-zinc-100 text-sm">
-                    {otherMember.created_at ? format(new Date(otherMember.created_at), 'MMMM d, yyyy') : 'Unknown'}
-                  </span>
-                </div>
+                {!otherMember.isGroup && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Email</span>
+                    <span className="text-zinc-900 dark:text-zinc-100">{otherMember.email || 'Private'}</span>
+                  </div>
+                )}
+                
+                {!otherMember.isGroup && (
+                  <div className="flex flex-col gap-1 pt-1">
+                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Member Since</span>
+                    <span className="text-zinc-900 dark:text-zinc-100 text-sm">
+                      {otherMember.created_at ? format(new Date(otherMember.created_at), 'MMMM d, yyyy') : 'Unknown'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             
-            <div className="mt-8 flex gap-3">
-              <button
-                onClick={() => {
-                  setShowUserProfile(false);
-                  handleCall('voice');
-                }}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-zinc-100 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+            <div className="mt-6 pt-4 border-t border-zinc-100 dark:border-zinc-800 shrink-0">
+              {otherMember.isGroup ? (
+                <button
+                  onClick={() => setShowUserProfile(false)}
+                  className="w-full rounded-2xl bg-zinc-100 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+                >
+                  Close Info
+                </button>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowUserProfile(false);
+                      handleCall('voice');
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-zinc-100 py-3 text-sm font-semibold text-zinc-900 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+                  >
+                    <Phone size={18} />
+                    Call
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUserProfile(false);
+                      handleCall('video');
+                    }}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 shadow-sm shadow-brand-500/20"
+                  >
+                    <Video size={18} />
+                    Video
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Poll Creator Modal */}
+      {showPollCreator && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200 flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center mb-4 shrink-0">
+              <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+                <BarChart2 className="text-brand-500" size={20} />
+                Create a Poll
+              </h3>
+              <button 
+                onClick={() => setShowPollCreator(false)}
+                className="rounded-full p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               >
-                <Phone size={18} />
-                Call
+                <X size={20} />
               </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-2 space-y-4 pr-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-zinc-400">Question</label>
+                <input 
+                  type="text"
+                  placeholder="Ask a question..."
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value)}
+                  className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm focus:border-brand-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-50"
+                />
+              </div>
+
+              <div className="space-y-2.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-zinc-400">Options</label>
+                {pollOptions.map((opt, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input 
+                      type="text"
+                      placeholder={`Option ${idx + 1}`}
+                      value={opt}
+                      onChange={(e) => {
+                        const newOpts = [...pollOptions];
+                        newOpts[idx] = e.target.value;
+                        setPollOptions(newOpts);
+                      }}
+                      className="flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm focus:border-brand-500 focus:outline-none dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-50"
+                    />
+                    {pollOptions.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newOpts = pollOptions.filter((_, oIdx) => oIdx !== idx);
+                          setPollOptions(newOpts);
+                        }}
+                        className="p-2 text-zinc-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-colors"
+                      >
+                        <Trash size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+                {pollOptions.length < 6 && (
+                  <button
+                    type="button"
+                    onClick={() => setPollOptions([...pollOptions, ''])}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-dashed border-zinc-200 hover:border-brand-500 text-xs font-semibold text-zinc-500 hover:text-brand-500 dark:border-zinc-800 dark:hover:border-brand-500 transition-colors"
+                  >
+                    <Plus size={14} />
+                    Add Option
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-800 shrink-0 mt-4">
               <button
-                onClick={() => {
-                  setShowUserProfile(false);
-                  handleCall('video');
-                }}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 shadow-sm shadow-brand-500/20"
+                type="button"
+                onClick={handleCreatePoll}
+                className="w-full rounded-2xl bg-brand-500 py-3 text-sm font-semibold text-white transition-colors hover:bg-brand-600 shadow-lg shadow-brand-500/25"
               >
-                <Video size={18} />
-                Video
+                Launch Poll
               </button>
             </div>
           </div>

@@ -202,21 +202,36 @@ export default function ChatsListScreen() {
             {/* Active Saved Chats */}
             {filteredConversations
               .filter((conv) => {
+                const isGroupOrCommunity = conv.type === 'group' || conv.type === 'community';
+                if (isGroupOrCommunity) return true;
                 const isSelf = conv.members.length === 1 || conv.members.every(m => m.id === user?.uid);
                 const otherMember = isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0]);
                 return !!otherMember;
               })
               .map((conv) => {
-                const isSelf = conv.members.length === 1 || conv.members.every(m => m.id === user?.uid);
-                const otherMember = isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0])!;
+                const isGroupOrCommunity = conv.type === 'group' || conv.type === 'community';
+                const isSelf = !isGroupOrCommunity && (conv.members.length === 1 || conv.members.every(m => m.id === user?.uid));
+                const otherMember = isGroupOrCommunity
+                  ? { 
+                      id: conv.id, 
+                      display_name: conv.name || (conv.type === 'group' ? 'Group Chat' : 'Community'), 
+                      avatar_url: conv.avatar_url || '', 
+                      is_online: false, 
+                      isGroup: true 
+                    }
+                  : (isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0]))!;
               
-              const isBlocked = blockedUserIds.includes(otherMember.id);
+              const isBlocked = !isGroupOrCommunity && blockedUserIds.includes(otherMember.id);
               const chatMsgs = messages[conv.id] || [];
               const lastMsg = chatMsgs.length > 0 ? chatMsgs[chatMsgs.length - 1] : null;
+              
+              const senderMember = lastMsg ? conv.members.find(m => m.id === lastMsg.sender_id) : null;
+              const senderPrefix = senderMember && isGroupOrCommunity ? `${senderMember.display_name}: ` : '';
+              
               const lastMsgText = isBlocked 
                 ? '🚫 Profile blocked' 
                 : lastMsg 
-                  ? (lastMsg.message_type === 'image' ? '📷 Photo' : lastMsg.content) 
+                  ? (lastMsg.message_type === 'image' ? '📷 Photo' : `${senderPrefix}${lastMsg.content}`) 
                   : (isSelf ? 'Message yourself' : 'Tap to view messages');
               
               const isUnread = !!conv.unreadCount;
@@ -238,12 +253,22 @@ export default function ChatsListScreen() {
                     onClick={() => navigate(`/chat/${conv.id}`)}
                     className="flex flex-1 items-center gap-3 text-left overflow-hidden"
                   >
-                    <Avatar src={otherMember.avatar_url} online={isSelf ? true : otherMember.is_online} size="lg" />
+                    <Avatar src={otherMember.avatar_url} online={isGroupOrCommunity ? undefined : (isSelf ? true : otherMember.is_online)} size="lg" />
                     
                     <div className="flex flex-1 flex-col overflow-hidden text-left">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className="font-semibold truncate">{otherMember.display_name}</span>
+                          {conv.type === 'group' && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300 shrink-0">
+                              Group
+                            </span>
+                          )}
+                          {conv.type === 'community' && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300 shrink-0">
+                              Community
+                            </span>
+                          )}
                           {isSelf && (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300 shrink-0">
                               You
