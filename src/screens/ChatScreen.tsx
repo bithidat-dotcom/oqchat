@@ -4,7 +4,7 @@ import { useChatStore, Message } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../components/ui/Avatar';
-import { ChevronLeft, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, CheckCheck, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users } from 'lucide-react';
+import { ChevronLeft, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, CheckCheck, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users, Maximize2, Download, Lock, Film } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import toast from 'react-hot-toast';
@@ -43,8 +43,11 @@ export default function ChatScreen() {
   // Reply state
   const [replyToMsg, setReplyToMsg] = useState<Message | null>(null);
 
-  // Selected image preview state before sending
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  // Selected media preview state before sending (image or video)
+  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; name?: string } | null>(null);
+
+  // Enlarged media lightbox state (for 1-click image/video expansion)
+  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
 
   // Forward Modal state
   const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
@@ -119,6 +122,28 @@ export default function ChatScreen() {
   }, [conversationId, storeConversation]);
 
   const rawMessages = conversationId ? messages[conversationId] || [] : [];
+
+  // Automatically mark unread incoming messages as read when opening/viewing the chat
+  useEffect(() => {
+    if (!conversationId || !user?.uid || !rawMessages.length) return;
+
+    const unreadFromOthers = rawMessages.filter(
+      m => m.sender_id !== user.uid && m.status !== 'read' && m.status !== 'seen'
+    );
+
+    if (unreadFromOthers.length > 0) {
+      import('../lib/firebase').then(({ db }) => {
+        import('firebase/firestore').then(({ doc, updateDoc }) => {
+          unreadFromOthers.forEach(msg => {
+            if (msg.id) {
+              const msgRef = doc(db, 'conversations', conversationId, 'messages', msg.id);
+              updateDoc(msgRef, { status: 'read' }).catch(() => {});
+            }
+          });
+        });
+      });
+    }
+  }, [conversationId, user?.uid, rawMessages]);
   
   const chatMessages = searchQuery.trim() 
     ? rawMessages.filter(m => m.content && m.content.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -131,7 +156,7 @@ export default function ChatScreen() {
         id: conversation.id,
         display_name: conversation.name || (conversation.type === 'group' ? 'Group Chat' : 'Community'),
         avatar_url: conversation.avatar_url || '',
-        is_online: false,
+        is_online: true,
         bio: conversation.description || 'Welcome to this chat space!',
         isGroup: true,
         type: conversation.type,
@@ -140,7 +165,7 @@ export default function ChatScreen() {
         membersList: conversation.members || []
       }
     : (isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]));
-  const isOnline = isGroupOrCommunity ? false : (isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false));
+  const isOnline = isGroupOrCommunity ? true : (isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false));
   
   // Find all typing users in this conversation (excluding ourselves)
   const typingUsers = React.useMemo(() => {
@@ -179,7 +204,12 @@ export default function ChatScreen() {
   };
 
   const handleCall = (type: 'voice' | 'video') => {
-    if (!otherMember || !user) return;
+    if (!otherMember || !user || !conversationId) return;
+    
+    // Record call event in conversation feed
+    const callText = type === 'video' ? '🎥 Video Call' : '📞 Voice Call';
+    sendMessage(conversationId, callText, 'call').catch(console.error);
+
     setCalling(true);
     setActiveCall({
       caller: user.uid,
@@ -519,19 +549,20 @@ export default function ChatScreen() {
       return;
     }
 
-    if (selectedImage && conversationId) {
+    if (selectedMedia && conversationId) {
       setIsSendingMedia(true);
       try {
         const text = content.trim();
         const replyId = replyToMsg ? replyToMsg.id : null;
+        const mediaToSend = selectedMedia;
         setContent('');
         setReplyToMsg(null);
-        setSelectedImage(null);
-        await sendMessage(conversationId, text, 'image', selectedImage, replyId);
+        setSelectedMedia(null);
+        await sendMessage(conversationId, text, mediaToSend.type, mediaToSend.url, replyId);
         scrollToBottom();
-        toast.success('Image sent');
+        toast.success(mediaToSend.type === 'video' ? 'Video sent' : 'Image sent');
       } catch (error) {
-        toast.error('Failed to send image');
+        toast.error('Failed to send media');
       } finally {
         setIsSendingMedia(false);
       }
@@ -561,6 +592,16 @@ export default function ChatScreen() {
 
   const handleClearChat = () => {
     if (!conversationId) return;
+    const isAdmin = conversation?.admins && conversation.admins.length > 0
+      ? conversation.admins.includes(user?.uid || '')
+      : conversation?.members[0]?.id === user?.uid;
+
+    if (isGroupOrCommunity && !isAdmin) {
+      toast.error('Only Group Admins can clear or delete group chat history!');
+      setShowMoreMenu(false);
+      return;
+    }
+
     if (window.confirm('Are you sure you want to clear all messages in this chat?')) {
       clearMessages(conversationId);
       setShowMoreMenu(false);
@@ -599,7 +640,7 @@ export default function ChatScreen() {
     setEditingMsg(null);
   };
 
-  const imageMessages = rawMessages.filter(m => m.message_type === 'image' && m.media_url);
+  const sharedMediaMessages = rawMessages.filter(m => (m.message_type === 'image' || m.message_type === 'video') && m.media_url);
 
   if (!conversation) {
     return (
@@ -714,7 +755,7 @@ export default function ChatScreen() {
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-sm rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
                   >
                     <ImageIcon size={16} />
-                    <span>Media ({imageMessages.length})</span>
+                    <span>Media ({sharedMediaMessages.length})</span>
                   </button>
                   <button 
                     onClick={() => {
@@ -763,6 +804,37 @@ export default function ChatScreen() {
             // Find replied target message
             const repliedToObj = msg.reply_to ? rawMessages.find(m => m.id === msg.reply_to) : null;
             
+            // Check if system call log message
+            if (msg.message_type === 'call' || msg.content?.startsWith('📞 Call') || msg.content?.startsWith('🎥 Video Call')) {
+              const isVid = msg.content?.toLowerCase().includes('video');
+              return (
+                <div key={msg.id} className="w-full flex justify-center my-2.5">
+                  <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700/60 rounded-2xl px-4 py-2.5 text-xs font-medium text-zinc-700 dark:text-zinc-200 shadow-sm animate-in fade-in duration-200">
+                    <div className="p-2 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 shrink-0">
+                      {isVid ? <Video size={16} /> : <Phone size={16} />}
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-xs text-zinc-900 dark:text-zinc-100">
+                        {msg.content || 'Voice Call'}
+                      </span>
+                      <span className="text-[10px] text-zinc-400">
+                        {format(new Date(msg.created_at), 'h:mm a')}
+                      </span>
+                    </div>
+                    {!isGroupOrCommunity && (
+                      <button
+                        type="button"
+                        onClick={() => handleCall(isVid ? 'video' : 'voice')}
+                        className="ml-2 px-3 py-1 rounded-xl bg-gradient-to-r from-[#88FF00] to-[#8EFE00] text-zinc-950 font-bold hover:brightness-105 active:scale-95 transition-all text-[11px] shadow-sm"
+                      >
+                        Call Back
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div key={msg.id} className={cn("flex flex-col group", isMe ? "items-end" : "items-start")}>
                 {showTime && (
@@ -780,13 +852,29 @@ export default function ChatScreen() {
                 
                 <div className={cn("flex items-center gap-1 group/bubble max-w-[85%]", isMe ? "flex-row-reverse" : "flex-row")}>
                   <div 
-                    onClick={() => setSelectedMsg(msg)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedMsg(msg);
+                      if (isMe && msg.message_type === 'text' && !msg.deleted_at) {
+                        setEditingMsg(msg);
+                        setEditText(msg.content || '');
+                      }
+                    }}
+                    onClick={(e) => {
+                      if (msg.message_type === 'image' && msg.media_url) {
+                        e.stopPropagation();
+                        setLightboxMedia({ url: msg.media_url, type: 'image' });
+                      } else if (msg.message_type === 'video' && msg.media_url) {
+                        e.stopPropagation();
+                        setLightboxMedia({ url: msg.media_url, type: 'video' });
+                      }
+                    }}
                     className={cn(
                       "flex-1 rounded-2xl text-base shadow-sm overflow-hidden transition-all cursor-pointer relative hover:brightness-95 active:scale-[0.98]",
                       isMe 
                         ? "bg-brand-500 text-white rounded-tr-sm" 
                         : "bg-white text-zinc-900 border border-zinc-100 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-50 rounded-tl-sm",
-                      msg.message_type === 'image' ? "p-1" : "px-4 py-2.5"
+                      (msg.message_type === 'image' || msg.message_type === 'video') ? "p-1" : "px-4 py-2.5"
                     )}
                   >
                     {/* Replied block quote if present */}
@@ -800,13 +888,43 @@ export default function ChatScreen() {
                           <span>Reply</span>
                         </div>
                         <p className="line-clamp-1 italic">
-                          {repliedToObj.content || (repliedToObj.message_type === 'image' ? 'Photo' : 'Voice Message')}
+                          {repliedToObj.content || (repliedToObj.message_type === 'image' ? 'Photo' : repliedToObj.message_type === 'video' ? 'Video' : 'Voice Message')}
                         </p>
                       </div>
                     )}
 
                     {msg.message_type === 'image' && msg.media_url ? (
-                      <img src={msg.media_url} alt="Sent image" className="rounded-xl w-full h-auto object-cover max-h-64" />
+                      <div className="relative group/img rounded-xl overflow-hidden max-w-xs sm:max-w-sm">
+                        <img 
+                          src={msg.media_url} 
+                          alt="Sent image" 
+                          className="rounded-xl w-full h-auto object-cover max-h-72 transition-transform hover:scale-105" 
+                        />
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="text-[11px] text-white font-semibold bg-black/60 px-3 py-1 rounded-full backdrop-blur-sm shadow-sm">
+                            Click to enlarge 🔍
+                          </span>
+                        </div>
+                      </div>
+                    ) : msg.message_type === 'video' && msg.media_url ? (
+                      <div className="relative group/vid rounded-xl overflow-hidden max-w-xs sm:max-w-sm bg-black">
+                        <video 
+                          src={msg.media_url} 
+                          controls
+                          className="rounded-xl w-full max-h-72 object-cover" 
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLightboxMedia({ url: msg.media_url!, type: 'video' });
+                          }}
+                          className="absolute top-2 right-2 p-1.5 bg-black/70 text-white rounded-full hover:bg-black transition-colors z-10 shadow-md"
+                          title="Enlarge Video"
+                        >
+                          <Maximize2 size={16} />
+                        </button>
+                      </div>
                     ) : msg.message_type === 'audio' ? (
                       <div className="flex items-center gap-3 py-1">
                         <button
@@ -976,7 +1094,7 @@ export default function ChatScreen() {
                   <div className="mt-1 text-[10px] text-zinc-400 flex items-center justify-end gap-1.5 px-0.5 select-none">
                     {msg.updated_at !== msg.created_at && <span className="italic">(edited)</span>}
                     {(() => {
-                      const isSeen = seenOverrideMap[msg.id] ?? (msg.status === 'read' || (msg.status as string) === 'seen' || isOnline);
+                      const isSeen = seenOverrideMap[msg.id] ?? (msg.status === 'read' || (msg.status as string) === 'seen');
                       return (
                         <button
                           type="button"
@@ -1069,23 +1187,34 @@ export default function ChatScreen() {
           </div>
         )}
 
-        {/* Selected Image Preview */}
-        {selectedImage && (
+        {/* Selected Media Preview (Image or Video) */}
+        {selectedMedia && (
           <div className="mb-2 p-2 rounded-2xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 flex items-center justify-between animate-in fade-in duration-150">
-            <div className="flex items-center gap-3">
-              <div className="relative h-14 w-14 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-100 shrink-0">
-                <img src={selectedImage} alt="Selected preview" className="h-full w-full object-cover" />
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="relative h-14 w-14 rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-black shrink-0 flex items-center justify-center">
+                {selectedMedia.type === 'video' ? (
+                  <div className="relative w-full h-full flex items-center justify-center bg-zinc-900">
+                    <video src={selectedMedia.url} className="h-full w-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <Film size={20} className="text-white drop-shadow" />
+                    </div>
+                  </div>
+                ) : (
+                  <img src={selectedMedia.url} alt="Selected preview" className="h-full w-full object-cover" />
+                )}
               </div>
               <div className="flex flex-col min-w-0">
-                <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Image selected</span>
-                <span className="text-[10px] text-zinc-400 truncate">Ready to send with Send button</span>
+                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 truncate">
+                  {selectedMedia.type === 'video' ? 'Video selected' : 'Image selected'}
+                </span>
+                <span className="text-[10px] text-zinc-400 truncate">Tap Send button to share</span>
               </div>
             </div>
             <button 
               type="button" 
-              onClick={() => setSelectedImage(null)} 
+              onClick={() => setSelectedMedia(null)} 
               className="p-1.5 text-zinc-400 hover:text-red-500 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors shrink-0"
-              title="Remove image"
+              title="Remove media"
             >
               <X size={18} />
             </button>
@@ -1126,20 +1255,36 @@ export default function ChatScreen() {
             <input 
               type="file"
               ref={fileInputRef}
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
                 if (file && conversationId) {
                   setIsSendingMedia(true);
                   try {
-                    const compressed = await compressImage(file);
-                    setSelectedImage(compressed);
-                    toast.success('Image loaded. Tap Send to share!');
+                    if (file.type.startsWith('video/')) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const videoUrl = event.target?.result as string;
+                        setSelectedMedia({ url: videoUrl, type: 'video', name: file.name });
+                        toast.success('Video selected! Tap Send to share');
+                        setIsSendingMedia(false);
+                      };
+                      reader.onerror = () => {
+                        toast.error('Failed to read video file');
+                        setIsSendingMedia(false);
+                      };
+                      reader.readAsDataURL(file);
+                    } else {
+                      const compressed = await compressImage(file);
+                      setSelectedMedia({ url: compressed, type: 'image', name: file.name });
+                      toast.success('Image loaded. Tap Send to share!');
+                      setIsSendingMedia(false);
+                    }
                   } catch (error) {
-                    toast.error('Failed to select image');
-                  } finally {
+                    toast.error('Failed to select file');
                     setIsSendingMedia(false);
+                  } finally {
                     if (fileInputRef.current) fileInputRef.current.value = '';
                   }
                 }
@@ -1175,7 +1320,7 @@ export default function ChatScreen() {
                 type="text"
                 value={content}
                 onChange={handleTyping}
-                placeholder={selectedImage ? "Add a caption..." : "Message..."}
+                placeholder={selectedMedia ? `Add a caption for ${selectedMedia.type}...` : "Message..."}
                 className="w-full rounded-2xl border-none bg-zinc-100 px-4 py-3 pr-10 text-base focus:ring-2 focus:ring-brand-500 dark:bg-zinc-900 dark:text-zinc-50"
               />
               <button 
@@ -1190,12 +1335,12 @@ export default function ChatScreen() {
               type="submit" 
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 shadow-md",
-                (content.trim() || selectedImage)
+                (content.trim() || selectedMedia)
                   ? "bg-gradient-to-r from-[#88FF00] to-[#8EFE00] text-zinc-950 font-bold hover:brightness-105 active:scale-95 shadow-[#88FF00]/30" 
                   : "bg-gradient-to-r from-[#88FF00] to-[#8EFE00] text-zinc-950 font-bold hover:brightness-105 active:scale-95 shadow-[#88FF00]/30"
               )}
             >
-              {(content.trim() || selectedImage) ? <Send size={20} className="ml-0.5" /> : <Mic size={20} />}
+              {(content.trim() || selectedMedia) ? <Send size={20} className="ml-0.5" /> : <Mic size={20} />}
             </button>
           </form>
         )}
@@ -1350,6 +1495,56 @@ export default function ChatScreen() {
         </div>
       )}
 
+      {/* Lightbox Enlarged Media Modal (1-click expansion) */}
+      {lightboxMedia && (
+        <div 
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200 select-none"
+          onClick={() => setLightboxMedia(null)}
+        >
+          <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+            <a 
+              href={lightboxMedia.url} 
+              download={lightboxMedia.type === 'video' ? 'chat_video.mp4' : 'chat_image.png'}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              title="Download Media"
+            >
+              <Download size={20} />
+            </a>
+            <button 
+              onClick={() => setLightboxMedia(null)} 
+              className="p-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              title="Close View"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <div 
+            className="max-w-4xl max-h-[85vh] w-full h-full flex items-center justify-center p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightboxMedia.type === 'video' ? (
+              <video 
+                src={lightboxMedia.url} 
+                controls 
+                autoPlay 
+                className="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-white/10" 
+              />
+            ) : (
+              <img 
+                src={lightboxMedia.url} 
+                alt="Enlarged view" 
+                className="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain border border-white/10" 
+              />
+            )}
+          </div>
+          <span className="text-xs text-zinc-400 mt-2">Tap anywhere outside to close</span>
+        </div>
+      )}
+
       {/* Forward Message Modal */}
       {forwardingMsg && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -1400,24 +1595,43 @@ export default function ChatScreen() {
       {showMediaGallery && (
         <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-white animate-in fade-in duration-200">
           <div className="flex h-16 shrink-0 items-center justify-between px-4 border-b border-zinc-800">
-            <h2 className="text-lg font-semibold">Shared Media ({imageMessages.length})</h2>
+            <h2 className="text-lg font-semibold">Shared Media ({sharedMediaMessages.length})</h2>
             <button onClick={() => setShowMediaGallery(false)} className="p-2 rounded-full hover:bg-zinc-800">
               <X size={24} />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {imageMessages.map((msg) => (
-              <img 
-                key={msg.id} 
-                src={msg.media_url!} 
-                alt="Shared media" 
-                className="w-full h-40 object-cover rounded-2xl ring-1 ring-zinc-800" 
-              />
+            {sharedMediaMessages.map((msg) => (
+              <div
+                key={msg.id}
+                onClick={() => {
+                  setShowMediaGallery(false);
+                  setLightboxMedia({ url: msg.media_url!, type: msg.message_type as 'image' | 'video' });
+                }}
+                className="relative w-full h-40 rounded-2xl overflow-hidden ring-1 ring-zinc-800 bg-zinc-900 cursor-pointer group hover:opacity-90 transition-all hover:scale-[1.02]"
+              >
+                {msg.message_type === 'video' ? (
+                  <div className="relative w-full h-full">
+                    <video src={msg.media_url!} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                      <div className="p-2.5 rounded-full bg-black/60 text-white shadow-lg backdrop-blur-sm">
+                        <Film size={24} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <img 
+                    src={msg.media_url!} 
+                    alt="Shared media" 
+                    className="w-full h-full object-cover" 
+                  />
+                )}
+              </div>
             ))}
-            {imageMessages.length === 0 && (
+            {sharedMediaMessages.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center p-12 text-zinc-500">
                 <ImageIcon size={48} className="mb-2 opacity-50" />
-                <p>No photos shared in this chat yet</p>
+                <p>No photos or videos shared in this chat yet</p>
               </div>
             )}
           </div>
@@ -1461,18 +1675,16 @@ export default function ChatScreen() {
                   />
                 </div>
               ) : (
-                <Avatar src={otherMember.avatar_url} online={!otherMember.isGroup && isOnline} size="md" className="shadow-sm" />
+                <Avatar src={otherMember.avatar_url} online={isOnline} size="md" className="shadow-sm" />
               )}
               
               <div className="text-center space-y-0.5">
                 <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50 tracking-tight leading-tight">
                   {otherMember.display_name}
                 </h2>
-                {!otherMember.isGroup && (
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                    {isOnline ? 'Active now' : getPresenceText().replace('typing...', 'Online')}
-                  </p>
-                )}
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
+                  {otherMember.isGroup ? `Active now • ${otherMember.membersList?.length || 0} members` : (isOnline ? 'Active now' : getPresenceText().replace('typing...', 'Online'))}
+                </p>
               </div>
 
               {/* Messenger Quick Actions Bar */}

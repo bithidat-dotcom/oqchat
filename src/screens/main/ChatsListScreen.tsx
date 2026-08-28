@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore, Conversation } from '../../store/chatStore';
 import { Avatar } from '../../components/ui/Avatar';
-import { Search, Plus, MessageSquare, Trash2, AlertCircle, Ban, Mail, CheckCircle2, MoreVertical, X, Phone, Video } from 'lucide-react';
+import { Search, Plus, MessageSquare, Trash2, AlertCircle, Ban, Mail, CheckCircle2, MoreVertical, X, Phone, Video, Lock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '../../components/ui/Button';
 import NewChatModal from './NewChatModal';
@@ -158,6 +158,17 @@ export default function ChatsListScreen() {
 
   const confirmDeleteChat = () => {
     if (deletingConv) {
+      const conv = conversations.find(c => c.id === deletingConv.id);
+      if (conv && (conv.type === 'group' || conv.type === 'community')) {
+        const isAdmin = conv.admins && conv.admins.length > 0
+          ? conv.admins.includes(user?.uid || '')
+          : conv.members[0]?.id === user?.uid;
+        if (!isAdmin) {
+          toast.error("Only Group Admins can delete group chats!");
+          setDeletingConv(null);
+          return;
+        }
+      }
       deleteConversation(deletingConv.id);
       toast.success(`Chat deleted`);
       setDeletingConv(null);
@@ -243,7 +254,7 @@ export default function ChatsListScreen() {
                       id: conv.id, 
                       display_name: conv.name || (conv.type === 'group' ? 'Group Chat' : 'Community'), 
                       avatar_url: conv.avatar_url || '', 
-                      is_online: false, 
+                      is_online: true, 
                       isGroup: true 
                     }
                   : (isSelf ? currentUserProfile : (conv.members.find(m => m.id !== user?.uid) || conv.members[0]))!;
@@ -280,7 +291,7 @@ export default function ChatsListScreen() {
                     onClick={() => navigate(`/chat/${conv.id}`)}
                     className="flex flex-1 items-center gap-3 text-left overflow-hidden"
                   >
-                    <Avatar src={otherMember.avatar_url} online={isGroupOrCommunity ? undefined : (isSelf ? true : otherMember.is_online)} size="lg" />
+                    <Avatar src={otherMember.avatar_url} online={isGroupOrCommunity ? true : (isSelf ? true : otherMember.is_online)} size="lg" />
                     
                     <div className="flex flex-1 flex-col overflow-hidden text-left">
                       <div className="flex items-center justify-between">
@@ -466,21 +477,46 @@ export default function ChatsListScreen() {
                   </button>
 
                   {/* Remove / Delete Chat Button */}
-                  <button 
-                    onClick={() => {
-                      const targetConvId = selectedConv.conv.id;
-                      const targetName = selectedConv.targetUser.display_name;
-                      setSelectedConv(null);
-                      setDeletingConv({ id: targetConvId, name: targetName });
-                    }}
-                    className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10 text-red-600 dark:text-red-400 transition-colors text-left"
-                  >
-                    <Trash2 size={20} />
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm">Remove Profile Chat</span>
-                      <span className="text-xs opacity-80">Delete chat history permanently</span>
-                    </div>
-                  </button>
+                  {(() => {
+                    const isGroupOrComm = selectedConv.conv.type === 'group' || selectedConv.conv.type === 'community';
+                    const isGroupAdmin = isGroupOrComm
+                      ? (selectedConv.conv.admins && selectedConv.conv.admins.length > 0
+                          ? selectedConv.conv.admins.includes(user?.uid || '')
+                          : selectedConv.conv.members[0]?.id === user?.uid)
+                      : true;
+
+                    if (isGroupOrComm && !isGroupAdmin) {
+                      return (
+                        <div className="flex w-full items-center gap-3 p-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 text-zinc-400 dark:text-zinc-500 text-left">
+                          <Lock size={20} className="shrink-0 text-amber-500" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-sm text-zinc-600 dark:text-zinc-400">Delete Group (Admin Only)</span>
+                            <span className="text-[11px] opacity-80">Only group admins can delete group chats</span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <button 
+                        onClick={() => {
+                          const targetConvId = selectedConv.conv.id;
+                          const targetName = selectedConv.targetUser.display_name;
+                          setSelectedConv(null);
+                          setDeletingConv({ id: targetConvId, name: targetName });
+                        }}
+                        className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10 text-red-600 dark:text-red-400 transition-colors text-left"
+                      >
+                        <Trash2 size={20} />
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-sm">
+                            {isGroupOrComm ? 'Delete Group Chat' : 'Remove Profile Chat'}
+                          </span>
+                          <span className="text-xs opacity-80">Delete chat history permanently</span>
+                        </div>
+                      </button>
+                    );
+                  })()}
                 </>
               ) : (
                 <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-2">

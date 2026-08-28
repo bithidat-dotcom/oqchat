@@ -4,7 +4,7 @@ import { collection, doc, setDoc, onSnapshot, query, where, orderBy, getDocs, de
 import { useAuthStore } from './authStore';
 import { encryptText, decryptText } from '../lib/encryption';
 
-export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'poll';
+export type MessageType = 'text' | 'image' | 'video' | 'audio' | 'file' | 'poll' | 'call';
 
 export interface Message {
   id: string;
@@ -18,7 +18,7 @@ export interface Message {
   updated_at: string;
   deleted_at: string | null;
   deleted_for?: string[];
-  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'error';
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'seen' | 'error';
 }
 
 export interface Conversation {
