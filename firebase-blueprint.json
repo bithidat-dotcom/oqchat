@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "display_name": { "type": "string" },
+        "avatar_url": { "type": "string" },
+        "bio": { "type": "string" },
+        "is_online": { "type": "boolean" },
+        "last_seen": { "type": "string", "format": "date-time" },
+        "followers_count": { "type": "integer" },
+        "following_count": { "type": "integer" },
+        "call_background_url": { "type": "string" }
+      },
+      "required": ["username", "display_name"]
+    },
+    "Follow": {
+      "title": "Follow",
+      "description": "Follow relationship between users",
+      "type": "object",
+      "properties": {
+        "follower_id": { "type": "string" },
+        "following_id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["follower_id", "following_id"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Chat conversation",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["direct", "group", "community"] },
+        "name": { "type": "string" },
+        "avatar_url": { "type": "string" },
+        "description": { "type": "string" },
+        "memberIds": { "type": "array", "items": { "type": "string" } },
+        "admins": { "type": "array", "items": { "type": "string" } },
+        "coAdmins": { "type": "array", "items": { "type": "string" } },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "memberIds"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Chat message",
+      "type": "object",
+      "properties": {
+        "conversation_id": { "type": "string" },
+        "sender_id": { "type": "string" },
+        "content": { "type": "string" },
+        "message_type": { "type": "string", "enum": ["text", "image", "video", "audio", "file", "poll", "call"] },
+        "media_url": { "type": "string" },
+        "reply_to": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["sending", "sent", "delivered", "read", "seen", "error"] }
+      },
+      "required": ["conversation_id", "sender_id", "message_type"]
+    },
+    "Call": {
+      "title": "Call",
+      "description": "Audio/Video call",
+      "type": "object",
+      "properties": {
+        "caller": { "type": "string" },
+        "receiver": { "type": "string" },
+        "type": { "type": "string", "enum": ["voice", "video"] },
+        "status": { "type": "string", "enum": ["ringing", "connected", "rejected", "ended", "calling"] },
+        "offer": { "type": "object" },
+        "answer": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["caller", "receiver", "type", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/follows/{followId}": {
+      "schema": "Follow",
+      "description": "Follow relationships"
+    },
+    "/conversations/{convId}": {
+      "schema": "Conversation",
+      "description": "Chat conversations"
+    },
+    "/conversations/{convId}/messages/{msgId}": {
+      "schema": "Message",
+      "description": "Messages within a conversation"
+    },
+    "/calls/{callId}": {
+      "schema": "Call",
+      "description": "Call sessions"
+    }
+  }
+}

@@ -15,10 +15,29 @@ const ICE_SERVERS = {
   ],
 };
 
+const CALL_BACKGROUNDS = [
+  'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop', // Dark Minimal
+  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop', // Abstract Pink/Blue
+  'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop', // Colorful Gradient
+  'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop', // Dark Blue Gradient
+];
+
 export default function CallModal() {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const { activeCall, isCalling, incomingCall, setActiveCall, setCalling, setIncomingCall, localStream, remoteStream, setStreams } = useCallStore();
   
+  const [bgUrl, setBgUrl] = useState(() => {
+    return localStorage.getItem('setting_call_bg_url') || '';
+  });
+
+  const getStatusText = () => {
+    if (activeCall?.status === 'ringing') return 'Ringing...';
+    if (activeCall?.status === 'connected') return 'Connected';
+    return 'Calling...';
+  };
+
+  const currentBg = bgUrl || 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop';
+
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -29,6 +48,19 @@ export default function CallModal() {
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+
+  // Update bg index from storage when it changes
+  useEffect(() => {
+    const handleStorage = () => {
+      setBgUrl(localStorage.getItem('setting_call_bg_url') || '');
+    };
+    window.addEventListener('storage', handleStorage);
+    const interval = setInterval(handleStorage, 1000); // Poll since storage event only fires on other tabs
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
+  }, []);
 
   // Audio elements for ringtones
   const dialtoneRef = useRef<HTMLAudioElement | null>(null);
@@ -60,13 +92,15 @@ export default function CallModal() {
   // Listen for incoming calls globally
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'calls'), where('receiver', '==', user.uid), where('status', '==', 'ringing'));
+    const q = query(collection(db, 'calls'), where('receiver', '==', user.uid), where('status', '==', 'calling'));
     const unsub = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         const callDoc = snapshot.docs[0];
         const callData = { id: callDoc.id, ...callDoc.data() };
         if (!useCallStore.getState().isCalling && !useCallStore.getState().incomingCall) {
           setIncomingCall(callData);
+          // Set to ringing as we've "received" it
+          updateDoc(doc(db, 'calls', callDoc.id), { status: 'ringing' }).catch(() => {});
         }
       } else {
         // If we had an incoming call but it's no longer ringing (cancelled or answered elsewhere)
@@ -148,7 +182,7 @@ export default function CallModal() {
     const callRef = doc(collection(db, 'calls'));
     const callId = callRef.id;
 
-    setActiveCall({ id: callId, caller: user.uid, receiver: otherUserId, type: isVideo ? 'video' : 'voice', status: 'ringing' });
+    setActiveCall({ id: callId, caller: user.uid, receiver: otherUserId, type: isVideo ? 'video' : 'voice', status: 'calling' });
     setCalling(true);
     setIncomingCall(null);
 
@@ -169,7 +203,7 @@ export default function CallModal() {
         caller: user.uid,
         receiver: otherUserId,
         type: isVideo ? 'video' : 'voice',
-        status: 'ringing',
+        status: 'calling',
         offer: { type: offer.type, sdp: offer.sdp },
         createdAt: new Date().toISOString()
       });
@@ -410,24 +444,36 @@ export default function CallModal() {
           <>
             <video ref={remoteVideoRef} autoPlay playsInline className="h-full w-full object-cover" />
             {!remoteStream && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-zinc-900/90 backdrop-blur-md">
-                <Avatar size="xl" />
-                <p className="text-zinc-400 mt-4 text-sm animate-pulse">Connecting to video...</p>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div className="absolute inset-0 z-0">
+                  <img src={currentBg} alt="Background" className="w-full h-full object-cover opacity-40 blur-lg scale-110" />
+                </div>
+                <div className="relative z-10 flex flex-col items-center">
+                  <Avatar size="xl" />
+                  <p className="text-zinc-200 mt-4 text-sm font-medium animate-pulse">{getStatusText()}</p>
+                </div>
               </div>
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center">
-            <div className="w-32 h-32 rounded-full bg-zinc-800 flex items-center justify-center mb-6 ring-4 ring-zinc-800/50">
-               <Phone size={48} className="text-zinc-500" />
+          <div className="relative w-full h-full flex flex-col items-center justify-center">
+            <div className="absolute inset-0 z-0">
+              <img src={currentBg} alt="Background" className="w-full h-full object-cover opacity-60" />
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
             </div>
-            <h2 className="text-2xl font-semibold">Voice Call</h2>
-            <p className="text-zinc-400 mt-2">
-              {activeCall?.status === 'ringing' ? 'Calling...' : (activeCall?.status === 'connected' ? 'Connected' : 'Connecting...')}
-            </p>
-            {activeCall?.status === 'connected' && (
-              <audio ref={remoteVideoRef} autoPlay />
-            )}
+            
+            <div className="relative z-10 flex flex-col items-center justify-center">
+              <div className="w-32 h-32 rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center mb-6 ring-4 ring-white/20 shadow-2xl">
+                 <Phone size={48} className={cn("text-white", activeCall?.status === 'ringing' && "animate-bounce")} />
+              </div>
+              <h2 className="text-3xl font-bold text-white drop-shadow-md">Voice Call</h2>
+              <p className="text-zinc-200 mt-3 font-medium bg-black/20 px-4 py-1 rounded-full backdrop-blur-md">
+                {getStatusText()}
+              </p>
+              {activeCall?.status === 'connected' && (
+                <audio ref={remoteVideoRef} autoPlay />
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -445,28 +491,28 @@ export default function CallModal() {
       )}
 
       {/* Controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-8 pb-safe bg-gradient-to-t from-black/80 to-transparent flex justify-center gap-6 z-20">
-        <button onClick={toggleMic} className={cn("flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-md transition-all active:scale-95", micOn ? "bg-white/10 hover:bg-white/20 text-white" : "bg-white text-zinc-900")}>
+      <div className="absolute bottom-0 left-0 right-0 p-8 pb-safe bg-gradient-to-t from-black/90 via-black/40 to-transparent flex justify-center gap-6 z-20">
+        <button onClick={toggleMic} className={cn("flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-md transition-all active:scale-95 shadow-lg", micOn ? "bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/20" : "bg-white text-zinc-900")}>
           {micOn ? <Mic size={24} /> : <MicOff size={24} />}
         </button>
         
         {activeCall?.type === 'video' && (
           <>
-            <button onClick={toggleCamera} className={cn("flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-md transition-all active:scale-95", cameraOn ? "bg-white/10 hover:bg-white/20 text-white" : "bg-white text-zinc-900")}>
+            <button onClick={toggleCamera} className={cn("flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-md transition-all active:scale-95 shadow-lg", cameraOn ? "bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/20" : "bg-white text-zinc-900")}>
               {cameraOn ? <Video size={24} /> : <VideoOff size={24} />}
             </button>
             <button 
               onClick={switchCameraFacingMode}
               title={`Flip Camera (Current: ${facingMode === 'user' ? 'Front' : 'Back'})`}
-              className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all active:scale-95 text-white"
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-md transition-all active:scale-95 text-white shadow-lg ring-1 ring-white/20"
             >
               <SwitchCamera size={24} />
             </button>
           </>
         )}
         
-        <button onClick={() => endCall()} title="End Call" className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 hover:bg-red-700 text-white transition-all active:scale-95 shadow-xl ring-4 ring-red-500/30">
-          <PhoneOff size={26} className="rotate-[135deg]" />
+        <button onClick={() => endCall()} title="End Call" className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500 hover:bg-red-600 text-white transition-all active:scale-95 shadow-xl ring-4 ring-red-500/30">
+          <PhoneOff size={28} className="rotate-[135deg]" />
         </button>
       </div>
     </div>

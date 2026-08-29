@@ -291,7 +291,24 @@ export default function ChatsListScreen() {
                     onClick={() => navigate(`/chat/${conv.id}`)}
                     className="flex flex-1 items-center gap-3 text-left overflow-hidden"
                   >
-                    <Avatar src={otherMember.avatar_url} online={isGroupOrCommunity ? true : (isSelf ? true : otherMember.is_online)} size="lg" />
+                    <div className="relative shrink-0">
+                      <Avatar src={otherMember.avatar_url} online={isGroupOrCommunity ? true : (isSelf ? true : otherMember.is_online)} size="lg" />
+                      {(() => {
+                        const chatMsgs = messages[conv.id] || [];
+                        const lastReadStr = localStorage.getItem(`last_read_${conv.id}`);
+                        const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
+                        const unreadMsgs = chatMsgs.filter(m => m.sender_id !== user?.uid && new Date(m.created_at).getTime() > lastReadTime);
+                        let unreadCount = unreadMsgs.length;
+                        if (isUnread && unreadCount === 0) unreadCount = 1;
+                        if (unreadCount === 0) return null;
+                        const unreadDisplay = unreadCount >= 4 ? '4+' : String(unreadCount);
+                        return (
+                          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-emerald-500 text-[9px] font-bold text-white px-1 ring-2 ring-white dark:ring-zinc-900 shadow-sm z-10">
+                            {unreadDisplay}
+                          </span>
+                        );
+                      })()}
+                    </div>
                     
                     <div className="flex flex-1 flex-col overflow-hidden text-left">
                       <div className="flex items-center justify-between">
@@ -327,22 +344,6 @@ export default function ChatsListScreen() {
                         <span className="text-sm text-zinc-500 truncate dark:text-zinc-400">
                           {lastMsgText}
                         </span>
-                        {(() => {
-                          const lastReadStr = localStorage.getItem(`last_read_${conv.id}`);
-                          const lastReadTime = lastReadStr ? new Date(lastReadStr).getTime() : 0;
-                          const unreadMsgs = chatMsgs.filter(m => m.sender_id !== user?.uid && new Date(m.created_at).getTime() > lastReadTime);
-                          let unreadCount = unreadMsgs.length;
-                          if (isUnread && unreadCount === 0) {
-                            unreadCount = 1;
-                          }
-                          if (unreadCount === 0) return null;
-                          const unreadDisplay = unreadCount >= 4 ? '4+' : String(unreadCount);
-                          return (
-                            <span className="flex items-center justify-center min-w-[20px] h-5 rounded-full bg-brand-500 text-[10px] font-bold text-white px-1.5 shrink-0 ml-2 animate-pulse">
-                              {unreadDisplay}
-                            </span>
-                          );
-                        })()}
                       </div>
                     </div>
                   </button>

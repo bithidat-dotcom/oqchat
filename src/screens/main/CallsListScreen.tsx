@@ -132,6 +132,14 @@ export default function CallsListScreen() {
                   <span className="text-xs text-zinc-500 dark:text-zinc-400 truncate">
                     {p.isSelf ? 'Call yourself for preview & test' : (isOnline ? 'Online • Tap to call' : 'Offline')}
                   </span>
+                  {p.id && (
+                    <button 
+                      onClick={() => startCall(p, 'voice')}
+                      className="mt-1 text-[10px] font-bold text-brand-600 dark:text-brand-400 hover:underline uppercase tracking-wider text-left"
+                    >
+                      Call Again
+                    </button>
+                  )}
                 </div>
               </div>
 

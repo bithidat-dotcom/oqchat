@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Button } from '../../components/ui/Button';
 import { Avatar } from '../../components/ui/Avatar';
 import { Settings } from 'lucide-react';
 import EditProfileModal from './EditProfileModal';
 import SettingsModal from './SettingsModal';
+import UserListModal from '../../components/UserListModal';
 
 export default function ProfileScreen() {
+  const navigate = useNavigate();
   const { profile } = useAuthStore();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [userListConfig, setUserListConfig] = useState<{ isOpen: boolean; type: 'followers' | 'following' }>({
+    isOpen: false,
+    type: 'followers'
+  });
 
   return (
     <div className="flex h-full flex-col relative">
@@ -38,6 +45,29 @@ export default function ProfileScreen() {
             <h2 className="text-2xl font-bold truncate">{profile?.display_name || 'Anonymous'}</h2>
             <p className="text-zinc-500 text-sm truncate dark:text-zinc-400">@{profile?.username || 'user'}</p>
           </div>
+
+          <div className="flex items-center gap-8 py-2">
+            <button 
+              onClick={() => setUserListConfig({ isOpen: true, type: 'followers' })}
+              className="flex flex-col items-center group"
+            >
+              <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50 group-hover:text-brand-500 transition-colors">
+                {profile?.follower_count || 0}
+              </span>
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Followers</span>
+            </button>
+            <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800" />
+            <button 
+              onClick={() => setUserListConfig({ isOpen: true, type: 'following' })}
+              className="flex flex-col items-center group"
+            >
+              <span className="text-lg font-bold text-zinc-900 dark:text-zinc-50 group-hover:text-brand-500 transition-colors">
+                {profile?.following_count || 0}
+              </span>
+              <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wider">Following</span>
+            </button>
+          </div>
+
           {profile?.bio && (
             <p className="text-center text-zinc-600 mt-2 dark:text-zinc-300">{profile.bio}</p>
           )}
@@ -47,6 +77,16 @@ export default function ProfileScreen() {
 
       <EditProfileModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} />
       <SettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} />
+      
+      {profile && (
+        <UserListModal 
+          isOpen={userListConfig.isOpen}
+          type={userListConfig.type}
+          userId={profile.id}
+          onClose={() => setUserListConfig({ ...userListConfig, isOpen: false })}
+          onUserClick={(uid) => navigate(`/user/${uid}`)}
+        />
+      )}
     </div>
   );
 }

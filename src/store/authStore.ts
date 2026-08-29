@@ -12,6 +12,9 @@ export interface Profile {
   last_seen: string;
   gender?: string;
   dob?: string;
+  follower_count?: number;
+  following_count?: number;
+  call_background_url?: string;
 }
 
 interface AuthState {
@@ -28,6 +31,9 @@ interface AuthState {
   signIn: (phone: string, password?: string) => Promise<void>;
   signUp: (phone: string, password?: string) => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
+  followUser: (targetId: string) => Promise<void>;
+  unfollowUser: (targetId: string) => Promise<void>;
+  checkFollowStatus: (targetId: string) => Promise<boolean>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -46,6 +52,68 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!user || !profile) return;
     
     await updateDoc(doc(db, 'users', user.uid), updates as any);
+  },
+
+  followUser: async (targetId) => {
+    const { user, profile } = get();
+    if (!user || !profile || user.uid === targetId) return;
+
+    const { doc, increment, writeBatch } = await import('firebase/firestore');
+    const batch = writeBatch(db);
+
+    // Add to current user's following
+    batch.set(doc(db, 'following', user.uid, 'userFollowing', targetId), {
+      id: targetId,
+      created_at: new Date().toISOString()
+    });
+
+    // Add to target user's followers
+    batch.set(doc(db, 'followers', targetId, 'userFollowers', user.uid), {
+      id: user.uid,
+      created_at: new Date().toISOString()
+    });
+
+    // Update counts
+    batch.update(doc(db, 'users', user.uid), {
+      following_count: increment(1)
+    });
+    batch.update(doc(db, 'users', targetId), {
+      follower_count: increment(1)
+    });
+
+    await batch.commit();
+  },
+
+  unfollowUser: async (targetId) => {
+    const { user, profile } = get();
+    if (!user || !profile || user.uid === targetId) return;
+
+    const { doc, increment, writeBatch } = await import('firebase/firestore');
+    const batch = writeBatch(db);
+
+    // Remove from current user's following
+    batch.delete(doc(db, 'following', user.uid, 'userFollowing', targetId));
+
+    // Remove from target user's followers
+    batch.delete(doc(db, 'followers', targetId, 'userFollowers', user.uid));
+
+    // Update counts
+    batch.update(doc(db, 'users', user.uid), {
+      following_count: increment(-1)
+    });
+    batch.update(doc(db, 'users', targetId), {
+      follower_count: increment(-1)
+    });
+
+    await batch.commit();
+  },
+
+  checkFollowStatus: async (targetId) => {
+    const { user } = get();
+    if (!user) return false;
+    const { doc, getDoc } = await import('firebase/firestore');
+    const docSnap = await getDoc(doc(db, 'following', user.uid, 'userFollowing', targetId));
+    return docSnap.exists();
   },
   
   trackPresence: () => {

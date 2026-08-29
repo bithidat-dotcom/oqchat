@@ -4,7 +4,7 @@ import { useChatStore, Message } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../components/ui/Avatar';
-import { ChevronLeft, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, CheckCheck, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users, Maximize2, Download, Lock, Film } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, CheckCheck, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users, Maximize2, Download, Lock, Film, Settings, Link as LinkIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import toast from 'react-hot-toast';
@@ -19,59 +19,35 @@ export default function ChatScreen() {
   const { user, onlineUsers, profile: currentUserProfile } = useAuthStore();
   const { conversations, messages, sendMessage, clearMessages, deleteMessage, deleteMessageForMe, editMessage, fetchConversations } = useChatStore();
   const { setActiveCall, setCalling } = useCallStore();
-  
+
+  const [localConversation, setLocalConversation] = useState<any>(null);
+  const storeConversation = conversations.find(c => c.id === conversationId);
+  const conversation = storeConversation || localConversation;
+
+  const rawMessages = conversationId ? messages[conversationId] || [] : [];
+  const isGroupOrCommunity = conversation?.type === 'group' || conversation?.type === 'community';
+  const isSelf = !isGroupOrCommunity && (conversation?.members.length === 1 || conversation?.members.every(m => m.id === user?.uid));
+  const otherMember = isGroupOrCommunity
+    ? {
+        id: conversation.id,
+        display_name: conversation.name || (conversation.type === 'group' ? 'Group Chat' : 'Community'),
+        avatar_url: conversation.avatar_url || '',
+        is_online: true,
+        bio: conversation.description || 'Welcome to this chat space!',
+        isGroup: true,
+        type: conversation.type,
+        admins: conversation.admins || [],
+        coAdmins: conversation.coAdmins || [],
+        membersList: conversation.members || []
+      }
+    : (isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]));
+  const isOnline = isGroupOrCommunity ? true : (isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false));
+
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [isSendingMedia, setIsSendingMedia] = useState(false);
   const [showUserProfile, setShowUserProfile] = useState(false);
   const [time, setTime] = useState(Date.now());
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showMediaGallery, setShowMediaGallery] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-
-  // Message Context Action Menu Modal (on message click)
-  const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
-
-  // Edit Message state
-  const [editingMsg, setEditingMsg] = useState<Message | null>(null);
-  const [editText, setEditText] = useState('');
-
-  // Reply state
-  const [replyToMsg, setReplyToMsg] = useState<Message | null>(null);
-
-  // Selected media preview state before sending (image or video)
-  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; name?: string } | null>(null);
-
-  // Enlarged media lightbox state (for 1-click image/video expansion)
-  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
-
-  // Forward Modal state
-  const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
-
-  // Manual Seen/Unseen toggle map
-  const [seenOverrideMap, setSeenOverrideMap] = useState<Record<string, boolean>>({});
-
-  // Voice recording state
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-
-  // Poll creation state
-  const [showPollCreator, setShowPollCreator] = useState(false);
-  const [pollQuestion, setPollQuestion] = useState('');
-  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
-
-  // Playing audio message state
-  const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
-
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Keep a live timer running to refresh relative calculations like typing indicator
   useEffect(() => {
@@ -80,10 +56,6 @@ export default function ChatScreen() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  const [localConversation, setLocalConversation] = useState<any>(null);
-  const storeConversation = conversations.find(c => c.id === conversationId);
-  const conversation = storeConversation || localConversation;
 
   useEffect(() => {
     if (!conversationId || storeConversation) return;
@@ -121,7 +93,96 @@ export default function ChatScreen() {
     fetchLocalConv();
   }, [conversationId, storeConversation]);
 
-  const rawMessages = conversationId ? messages[conversationId] || [] : [];
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [chatWallpaper, setChatWallpaper] = useState(() => localStorage.getItem('setting_chat_wallpaper_url') || '');
+
+  // Listen for wallpaper changes
+  useEffect(() => {
+    const handleStorage = () => {
+      setChatWallpaper(localStorage.getItem('setting_chat_wallpaper_url') || '');
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+  const [showMediaGallery, setShowMediaGallery] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  // Message Context Action Menu Modal (on message click)
+  const [selectedMsg, setSelectedMsg] = useState<Message | null>(null);
+
+  // Edit Message state
+  const [editingMsg, setEditingMsg] = useState<Message | null>(null);
+  const [editText, setEditText] = useState('');
+
+  // Reply state
+  const [replyToMsg, setReplyToMsg] = useState<Message | null>(null);
+
+  // Selected media preview state before sending (image or video)
+  const [selectedMedia, setSelectedMedia] = useState<{ url: string; type: 'image' | 'video'; name?: string } | null>(null);
+
+  // Enlarged media lightbox state (for 1-click image/video expansion)
+  const [lightboxMedia, setLightboxMedia] = useState<{ url: string; type: 'image' | 'video' } | null>(null);
+
+  // Forward Modal state
+  const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
+
+  // Manual Seen/Unseen toggle map
+  const [seenOverrideMap, setSeenOverrideMap] = useState<Record<string, boolean>>({});
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  // Poll creation state
+  const [showPollCreator, setShowPollCreator] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
+
+  const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isFollowingOther, setIsFollowingOther] = useState(false);
+  const { followUser, unfollowUser, checkFollowStatus } = useAuthStore();
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showUserProfile && otherMember && !otherMember.isGroup) {
+      checkFollowStatus(otherMember.id).then(setIsFollowingOther);
+    }
+  }, [showUserProfile, otherMember?.id, checkFollowStatus]);
+
+  const handleToggleFollow = async () => {
+    if (!otherMember || otherMember.isGroup) return;
+    try {
+      if (isFollowingOther) {
+        await unfollowUser(otherMember.id);
+        setIsFollowingOther(false);
+        toast.success(`Unfollowed ${otherMember.display_name}`);
+      } else {
+        await followUser(otherMember.id);
+        setIsFollowingOther(true);
+        toast.success(`Following ${otherMember.display_name}`);
+      }
+    } catch (err) {
+      toast.error("Action failed");
+    }
+  };
+
+  const handleDeleteChatWithConfirm = () => {
+    if (!conversationId) return;
+    clearMessages(conversationId);
+    toast.success('Chat history cleared');
+    setShowDeleteConfirm(false);
+    setShowMoreMenu(false);
+  };
 
   // Automatically mark unread incoming messages as read when opening/viewing the chat
   useEffect(() => {
@@ -148,24 +209,6 @@ export default function ChatScreen() {
   const chatMessages = searchQuery.trim() 
     ? rawMessages.filter(m => m.content && m.content.toLowerCase().includes(searchQuery.toLowerCase()))
     : rawMessages;
-
-  const isGroupOrCommunity = conversation?.type === 'group' || conversation?.type === 'community';
-  const isSelf = !isGroupOrCommunity && (conversation?.members.length === 1 || conversation?.members.every(m => m.id === user?.uid));
-  const otherMember = isGroupOrCommunity
-    ? {
-        id: conversation.id,
-        display_name: conversation.name || (conversation.type === 'group' ? 'Group Chat' : 'Community'),
-        avatar_url: conversation.avatar_url || '',
-        is_online: true,
-        bio: conversation.description || 'Welcome to this chat space!',
-        isGroup: true,
-        type: conversation.type,
-        admins: conversation.admins || [],
-        coAdmins: conversation.coAdmins || [],
-        membersList: conversation.members || []
-      }
-    : (isSelf ? currentUserProfile : (conversation?.members.find(m => m.id !== user?.uid) || conversation?.members[0]));
-  const isOnline = isGroupOrCommunity ? true : (isSelf ? true : (otherMember ? !!onlineUsers[otherMember.id] || otherMember.is_online : false));
   
   // Find all typing users in this conversation (excluding ourselves)
   const typingUsers = React.useMemo(() => {
@@ -686,9 +729,18 @@ export default function ChatScreen() {
             
             <button 
               onClick={() => setShowUserProfile(true)}
-              className="flex items-center gap-3 text-left transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 p-1.5 -ml-1.5 rounded-xl min-w-0 max-w-[calc(100vw-180px)] sm:max-w-md"
+              className="flex items-center gap-2 text-left transition-colors hover:bg-zinc-100/50 dark:hover:bg-zinc-800/50 p-1.5 -ml-1.5 rounded-xl min-w-0 max-w-[calc(100vw-180px)] sm:max-w-md"
             >
-              <Avatar src={otherMember?.avatar_url} online={isOnline} size="md" className="shrink-0" />
+              <div className="relative shrink-0">
+                <Avatar src={otherMember?.avatar_url} online={isOnline} size="md" />
+                {isGroupOrCommunity && (
+                  <div className="absolute -bottom-1 -right-1 flex -space-x-2 p-0.5 rounded-full bg-white dark:bg-zinc-950 scale-75">
+                    {conversation?.members?.slice(0, 2).map((m: any) => (
+                      <Avatar key={m.id} src={m.avatar_url} size="xs" className="ring-1 ring-white dark:ring-zinc-950" />
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">{otherMember?.display_name}</span>
@@ -770,7 +822,10 @@ export default function ChatScreen() {
                   </button>
                   <div className="my-1 border-t border-zinc-100 dark:border-zinc-800" />
                   <button 
-                    onClick={handleClearChat}
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setShowDeleteConfirm(true);
+                    }}
                     className="flex w-full items-center gap-2.5 px-3 py-2 text-sm rounded-xl hover:bg-red-50 text-red-600 dark:hover:bg-red-500/10 dark:text-red-400 transition-colors"
                   >
                     <Trash2 size={16} />
@@ -784,8 +839,20 @@ export default function ChatScreen() {
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-        {loading ? (
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar relative"
+        style={{
+          backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed'
+        }}
+      >
+        {chatWallpaper && (
+          <div className="absolute inset-0 bg-white/40 dark:bg-zinc-950/60 pointer-events-none" />
+        )}
+        <div className="relative z-10 space-y-4 min-h-full">
+          {loading ? (
           <div className="flex justify-center p-4">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-brand-500"></div>
           </div>
@@ -1143,6 +1210,7 @@ export default function ChatScreen() {
           </div>
         ))}
         <div ref={bottomRef} />
+        </div>
       </div>
 
       {/* Emoji Picker Popover */}
@@ -1691,6 +1759,21 @@ export default function ChatScreen() {
               {!otherMember.isGroup && (
                 <div className="flex items-center justify-center gap-3 w-full py-1">
                   <button
+                    onClick={handleToggleFollow}
+                    className="flex flex-col items-center gap-1 group"
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform",
+                      isFollowingOther 
+                        ? "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                        : "bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"
+                    )}>
+                      {isFollowingOther ? <Users size={18} /> : <Plus size={18} />}
+                    </div>
+                    <span className="text-[10px] font-medium text-zinc-500">{isFollowingOther ? 'Following' : 'Follow'}</span>
+                  </button>
+
+                  <button
                     onClick={() => {
                       setShowUserProfile(false);
                       handleCall('voice');
@@ -1759,22 +1842,50 @@ export default function ChatScreen() {
                 {/* For groups and communities: Render members with roles */}
                 {otherMember.isGroup && (
                   <div className="space-y-3 w-full">
-                    <div className="flex justify-between items-center">
+                    {otherMember.admins?.includes(user?.uid) && (
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Group Settings</span>
+                        <div className="rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 p-2 space-y-1">
+                          <button 
+                            onClick={() => toast.success('Settings coming soon')}
+                            className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Settings size={14} className="text-zinc-500" />
+                              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Advanced Settings</span>
+                            </div>
+                            <ChevronRight size={14} className="text-zinc-400" />
+                          </button>
+                          <button 
+                            onClick={() => toast.success('Link copied')}
+                            className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <LinkIcon size={14} className="text-zinc-500" />
+                              <span className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Invite Link</span>
+                            </div>
+                            <ChevronRight size={14} className="text-zinc-400" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-center pt-1">
                       <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
                         Members ({otherMember.membersList?.length || 0})
                       </span>
                     </div>
  
-                    <div className="max-h-48 overflow-y-auto space-y-2 pr-1 border border-zinc-100 dark:border-zinc-800 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/50">
+                    <div className="max-h-60 overflow-y-auto space-y-2.5 pr-1 border border-zinc-100 dark:border-zinc-800 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-900/50">
                       {otherMember.membersList?.map((member: any) => {
                         const isAdmin = otherMember.admins?.includes(member.id);
                         const isCoAdmin = otherMember.coAdmins?.includes(member.id);
                         const isCurrentUserAdmin = otherMember.admins?.includes(user?.uid);
 
                         return (
-                          <div key={member.id} className="flex items-center justify-between gap-2 p-1">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Avatar src={member.avatar_url} size="xs" />
+                          <div key={member.id} className="flex items-center justify-between gap-3 p-1.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <Avatar src={member.avatar_url} size="sm" />
                               <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                                 {member.display_name}
                               </span>
@@ -1911,6 +2022,33 @@ export default function ChatScreen() {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-[280px] rounded-3xl bg-white p-6 shadow-2xl dark:bg-zinc-900 text-center animate-in zoom-in-95 duration-200">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/20 text-red-600">
+              <AlertCircle size={24} />
+            </div>
+            <h3 className="text-lg font-bold mb-2">Delete Chat?</h3>
+            <p className="text-zinc-500 text-xs mb-6">Are you sure you want to clear all messages? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 rounded-xl bg-zinc-100 py-2 text-sm font-semibold text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                No
+              </button>
+              <button 
+                onClick={handleDeleteChatWithConfirm}
+                className="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white shadow-md"
+              >
+                Yes
+              </button>
             </div>
           </div>
         </div>

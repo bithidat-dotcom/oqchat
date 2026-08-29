@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, LogOut, User, Shield, Bell, Moon, Monitor, EyeOff, FileText, Ban, Check, ChevronRight, Lock, Smartphone, Volume2, ShieldCheck, Mail, Phone, Calendar, Info } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { cn } from '../../lib/utils';
 import toast from 'react-hot-toast';
 
 interface SettingsModalProps {
@@ -62,6 +63,35 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   // Personal Info edit form
   const [editDisplayName, setEditDisplayName] = useState(profile?.display_name || '');
   const [editBio, setEditBio] = useState(profile?.bio || '');
+
+  const [callBgIndex, setCallBgIndex] = useState(() => {
+    return Number(localStorage.getItem('setting_call_bg_index')) || 0;
+  });
+
+  const [callBgUrl, setCallBgUrl] = useState(() => {
+    return localStorage.getItem('setting_call_bg_url') || '';
+  });
+
+  const [chatWallpaperUrl, setChatWallpaperUrl] = useState(() => {
+    return localStorage.getItem('setting_chat_wallpaper_url') || '';
+  });
+
+  const CALL_BACKGROUNDS = [
+    { name: 'Dark Minimal', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop' },
+    { name: 'Abstract Pink/Blue', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop' },
+    { name: 'Colorful Gradient', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop' },
+    { name: 'Dark Blue Gradient', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop' },
+    { name: 'Cloud Aesthetic', url: '/b591a35959ec10ab5079ba55b1d02d59.jpg' },
+    { name: 'Deep Blue Horizon', url: '/7c77a6d897ab20299f621a8d316df795.jpg' },
+  ];
+
+  const CHAT_WALLPAPERS = [
+    { name: 'None', url: '' },
+    { name: 'Cloud Aesthetic', url: '/b591a35959ec10ab5079ba55b1d02d59.jpg' },
+    { name: 'Deep Blue Horizon', url: '/7c77a6d897ab20299f621a8d316df795.jpg' },
+    { name: 'Dark Minimal', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop' },
+    { name: 'Abstract Art', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop' },
+  ];
 
   useEffect(() => {
     if (profile) {
@@ -197,6 +227,68 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 value={msgSounds ? 'Enabled' : 'Muted'}
                 onClick={() => setActiveSubModal('notifications')} 
               />
+              <div className="p-4 border-t border-zinc-100 dark:border-zinc-800">
+                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Call Background Theme</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {CALL_BACKGROUNDS.map((bg, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setCallBgIndex(idx);
+                        setCallBgUrl(bg.url);
+                        localStorage.setItem('setting_call_bg_index', String(idx));
+                        localStorage.setItem('setting_call_bg_url', bg.url);
+                        updateProfile({ call_background_url: bg.url });
+                        toast.success('Call background updated');
+                      }}
+                      className={cn(
+                        "relative aspect-[9/16] rounded-lg overflow-hidden ring-offset-2 dark:ring-offset-zinc-950 transition-all",
+                        callBgUrl === bg.url ? "ring-2 ring-brand-500 scale-[1.02]" : "hover:scale-[1.02]"
+                      )}
+                    >
+                      <img src={bg.url} alt={bg.name} className="h-full w-full object-cover" />
+                      {callBgUrl === bg.url && (
+                        <div className="absolute inset-0 bg-brand-500/20 flex items-center justify-center">
+                          <Check size={20} className="text-white drop-shadow-md" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-zinc-100 dark:border-zinc-800">
+                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Chat Wallpaper</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {CHAT_WALLPAPERS.map((bg, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setChatWallpaperUrl(bg.url);
+                        localStorage.setItem('setting_chat_wallpaper_url', bg.url);
+                        toast.success('Chat wallpaper updated');
+                      }}
+                      className={cn(
+                        "relative aspect-video rounded-lg overflow-hidden ring-offset-2 dark:ring-offset-zinc-950 transition-all",
+                        chatWallpaperUrl === bg.url ? "ring-2 ring-brand-500 scale-[1.02]" : "hover:scale-[1.02]"
+                      )}
+                    >
+                      {bg.url ? (
+                        <img src={bg.url} alt={bg.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">
+                          None
+                        </div>
+                      )}
+                      {chatWallpaperUrl === bg.url && (
+                        <div className="absolute inset-0 bg-brand-500/20 flex items-center justify-center">
+                          <Check size={20} className="text-white drop-shadow-md" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </section>
 
@@ -287,6 +379,40 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Account ID</label>
                 <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-100/60 px-4 py-2 text-xs font-mono text-zinc-500 dark:border-zinc-800 dark:bg-zinc-800/60 break-all">
                   <span>{user?.uid}</span>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">Call Background</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {CALL_BACKGROUNDS.map((bg) => (
+                    <button
+                      key={bg.name}
+                      type="button"
+                      onClick={() => {
+                        setCallBgUrl(bg.url);
+                        localStorage.setItem('setting_call_bg_url', bg.url);
+                        updateProfile({ call_background_url: bg.url });
+                        toast.success(`Background set to ${bg.name}`);
+                      }}
+                      className={`relative aspect-video rounded-xl overflow-hidden ring-2 transition-all ${
+                        callBgUrl === bg.url ? 'ring-brand-500 scale-105' : 'ring-transparent hover:ring-zinc-300'
+                      }`}
+                    >
+                      {bg.url ? (
+                        <img src={bg.url} alt={bg.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-[10px] font-bold text-zinc-400">
+                          None
+                        </div>
+                      )}
+                      {callBgUrl === bg.url && (
+                        <div className="absolute inset-0 bg-brand-500/10 flex items-center justify-center">
+                          <Check size={16} className="text-brand-500" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -460,7 +586,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800 space-y-3">
               <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">In-App Call Ringtone</h4>
               <div className="grid grid-cols-2 gap-2">
-                {(['classic', 'marimba', 'melody', 'electronic'] as const).map((type) => (
+                {(['classic', 'marimba', 'melody', 'electronic', 'toon'] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => {

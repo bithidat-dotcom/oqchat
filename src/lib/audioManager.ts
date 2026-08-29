@@ -2,7 +2,7 @@
 // This ensures offline capability, ultra-low latency, and perfect runtime compatibility without static files.
 
 type NotificationSoundType = 'standard' | 'chime' | 'digital' | 'bubble';
-type RingtoneSoundType = 'classic' | 'marimba' | 'melody' | 'electronic';
+type RingtoneSoundType = 'classic' | 'marimba' | 'melody' | 'electronic' | 'toon';
 
 let audioCtx: AudioContext | null = null;
 
@@ -236,6 +236,30 @@ export function startRingtoneSound(type: RingtoneSoundType = 'classic') {
         osc.stop(now + 1.3);
         
         activeRingtoneSources.push({ osc1: osc, gain: mainGain });
+      }
+      else if (type === 'toon') {
+        // Playful, bouncing "Toon" sound (rising boops)
+        const notes = [440, 554, 659, 880, 1108, 1318];
+        notes.forEach((freq, index) => {
+          const osc = ctx.createOscillator();
+          const noteGain = ctx.createGain();
+          
+          osc.type = 'square'; // Buzzier, more cartoonish sound
+          osc.frequency.setValueAtTime(freq, now + (index * 0.08));
+          osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + (index * 0.08) + 0.1);
+          
+          noteGain.gain.setValueAtTime(0, now + (index * 0.08));
+          noteGain.gain.linearRampToValueAtTime(0.15, now + (index * 0.08) + 0.01);
+          noteGain.gain.exponentialRampToValueAtTime(0.01, now + (index * 0.08) + 0.12);
+          
+          osc.connect(noteGain);
+          noteGain.connect(ctx.destination);
+          
+          osc.start(now + (index * 0.08));
+          osc.stop(now + (index * 0.08) + 0.15);
+          
+          activeRingtoneSources.push({ osc1: osc, gain: noteGain });
+        });
       }
     };
 

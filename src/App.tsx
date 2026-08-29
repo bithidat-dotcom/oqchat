@@ -16,6 +16,7 @@ const AuthScreen = React.lazy(() => import('./screens/AuthScreen'));
 const ProfileSetupScreen = React.lazy(() => import('./screens/ProfileSetupScreen'));
 const MainLayout = React.lazy(() => import('./screens/MainLayout'));
 const ChatScreen = React.lazy(() => import('./screens/ChatScreen'));
+const UserProfileScreen = React.lazy(() => import('./screens/main/UserProfileScreen'));
 
 function SplashLoader() {
   return (
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="/setup-profile" element={<ProtectedRoute><ProfileSetupScreen /></ProtectedRoute>} />
             <Route path="/*" element={<ProtectedRoute><MainLayout /></ProtectedRoute>} />
             <Route path="/chat/:id" element={<ProtectedRoute><ChatScreen /></ProtectedRoute>} />
+            <Route path="/user/:userId" element={<ProtectedRoute><UserProfileScreen /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </React.Suspense>

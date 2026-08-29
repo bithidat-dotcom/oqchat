@@ -57,6 +57,7 @@ interface ChatState {
   deleteConversation: (conversationId: string) => void;
   clearMessages: (conversationId: string) => void;
   sendMessage: (conversationId: string, content: string, type?: MessageType, mediaUrl?: string, replyToId?: string | null) => Promise<void>;
+  createConversation: (memberIds: string[]) => Promise<string>;
   setTypingStatus: (conversationId: string, isTyping: boolean) => Promise<void>;
   fetchConversations: () => Promise<void>;
 }
@@ -198,6 +199,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     // Save message
     await setDoc(doc(db, 'conversations', conversationId, 'messages', tempId), tempMessage);
+  },
+
+  createConversation: async (memberIds) => {
+    const q = query(collection(db, 'conversations'), 
+      where('type', '==', 'direct'), 
+      where('memberIds', 'array-contains-any', memberIds)
+    );
+    const snap = await getDocs(q);
+    const existing = snap.docs.find(d => {
+      const ids = d.data().memberIds || [];
+      return ids.length === memberIds.length && memberIds.every((id: string) => ids.includes(id));
+    });
+
+    if (existing) return existing.id;
+
+    const newDoc = doc(collection(db, 'conversations'));
+    await setDoc(newDoc, {
+      id: newDoc.id,
+      type: 'direct',
+      memberIds: memberIds,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    });
+    return newDoc.id;
   },
   
   setTypingStatus: async (conversationId, isTyping) => {
