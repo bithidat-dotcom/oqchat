@@ -93,6 +93,7 @@ export default function ChatScreen() {
     fetchLocalConv();
   }, [conversationId, storeConversation]);
 
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -1360,58 +1361,90 @@ export default function ChatScreen() {
                 }
               }}
             />
-            <button 
-              type="button" 
-              disabled={isSendingMedia}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors dark:hover:bg-zinc-800 dark:hover:text-zinc-300",
-                isSendingMedia ? "opacity-50 cursor-not-allowed" : "hover:bg-zinc-100 hover:text-zinc-600"
-              )}
-              title="Add Media / Attachment (+)"
-            >
-              {isSendingMedia ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
-              ) : (
-                <Plus size={22} strokeWidth={2.5} />
-              )}
-            </button>
+            {/* Single Clean + Toggle Button for Attachments */}
+            <div className="relative shrink-0">
+              <button 
+                type="button" 
+                disabled={isSendingMedia}
+                onClick={() => setShowAttachMenu(prev => !prev)}
+                className={cn(
+                  "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 shadow-sm",
+                  showAttachMenu 
+                    ? "bg-zinc-800 text-white rotate-45" 
+                    : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                )}
+                title="Attachment Options (+)"
+              >
+                {isSendingMedia ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+                ) : (
+                  <Plus size={22} strokeWidth={2.5} />
+                )}
+              </button>
 
-            <button 
-              type="button" 
-              onClick={() => {
-                const nextMute = !isMuted;
-                setIsMuted(nextMute);
-                toast.success(nextMute ? 'Notifications muted for this chat' : 'Notifications unmuted for this chat');
-              }}
-              className={cn(
-                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors dark:hover:bg-zinc-800",
-                isMuted 
-                  ? "bg-amber-500/10 text-amber-500 dark:bg-amber-500/20" 
-                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:text-zinc-300"
+              {/* Attachment Popover Menu */}
+              {showAttachMenu && (
+                <div className="absolute bottom-14 left-0 w-52 p-2 rounded-2xl bg-white shadow-2xl border border-zinc-200 dark:bg-zinc-900 dark:border-zinc-800 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 transition-colors text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+                      <ImageIcon size={16} />
+                    </div>
+                    <span>Photo / Video</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 transition-colors text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400">
+                      <Paperclip size={16} />
+                    </div>
+                    <span>Document / File</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      setShowPollCreator(true);
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 transition-colors text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+                      <BarChart2 size={16} />
+                    </div>
+                    <span>Create Poll</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAttachMenu(false);
+                      const nextMute = !isMuted;
+                      setIsMuted(nextMute);
+                      toast.success(nextMute ? 'Notifications muted' : 'Notifications unmuted');
+                    }}
+                    className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-200 transition-colors text-left"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400">
+                      {isMuted ? <BellOff size={16} /> : <Bell size={16} />}
+                    </div>
+                    <span>{isMuted ? 'Unmute Notifications' : 'Mute Notifications'}</span>
+                  </button>
+                </div>
               )}
-              title={isMuted ? "Unmute Notifications" : "Mute Notifications"}
-            >
-              {isMuted ? <BellOff size={20} /> : <Bell size={20} />}
-            </button>
-
-            <button 
-              type="button" 
-              onClick={() => fileInputRef.current?.click()}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition-colors"
-              title="Attach File"
-            >
-              <Paperclip size={20} />
-            </button>
-
-            <button 
-              type="button" 
-              onClick={() => setShowPollCreator(true)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition-colors"
-              title="Create Poll"
-            >
-              <BarChart2 size={20} />
-            </button>
+            </div>
             
             <div className="relative flex-1">
               <input

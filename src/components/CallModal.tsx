@@ -573,34 +573,78 @@ export default function CallModal() {
 
   if (!isCalling && !incomingCall) return null;
 
-  // Incoming Call Overlay
+  // Incoming Call Full-Screen Overlay
   if (incomingCall && !isCalling) {
     return (
-      <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 pointer-events-auto">
-        <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-[2.5rem] flex flex-col items-center w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200">
-          <div className="relative mb-6">
-            <div className="absolute inset-0 bg-brand-500 rounded-full animate-ping opacity-20"></div>
-            <div className="w-24 h-24 rounded-full bg-zinc-800 flex items-center justify-center relative z-10 border-4 border-zinc-900 shadow-xl">
-               <Phone size={36} className="text-brand-500 animate-pulse" />
+      <div className="fixed inset-0 z-[99999] flex flex-col items-center justify-between bg-zinc-950 text-white p-6 pt-16 pb-14 select-none pointer-events-auto animate-in fade-in duration-300">
+        {/* Background Layer with Blur & Wallpaper */}
+        <div className="absolute inset-0 z-0 overflow-hidden">
+          <img src={currentBg} alt="Call BG" className="w-full h-full object-cover opacity-30 blur-2xl scale-110" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-zinc-950/80 to-black" />
+        </div>
+
+        {/* Top Header */}
+        <div className="relative z-10 flex flex-col items-center text-center space-y-2">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-500/20 border border-brand-500/30 backdrop-blur-md">
+            <Phone size={16} className="text-brand-400 animate-pulse" />
+            <span className="text-xs font-bold text-brand-300 uppercase tracking-widest">
+              Incoming {incomingCall.type === 'video' ? 'Video' : 'Voice'} Call
+            </span>
+          </div>
+          <span className="text-xs text-zinc-400 font-medium">End-to-End Encrypted</span>
+        </div>
+
+        {/* Center Profile & Glowing Ring Avatar */}
+        <div className="relative z-10 flex flex-col items-center text-center space-y-4 my-auto">
+          <div className="relative flex items-center justify-center">
+            {/* Pulsating Radar Aura Rings */}
+            <div className="absolute w-44 h-44 rounded-full bg-brand-500/20 animate-ping duration-1000" />
+            <div className="absolute w-56 h-56 rounded-full bg-brand-500/10 animate-pulse duration-1000" />
+            <Avatar 
+              size="2xl" 
+              src={receiverProfile?.avatar_url} 
+              className="relative z-10 ring-4 ring-brand-500/80 shadow-[0_0_50px_rgba(136,255,0,0.4)]" 
+            />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-3xl font-extrabold text-white tracking-tight drop-shadow-md">
+              {receiverProfile?.display_name || incomingCall.callerName || 'Incoming Call'}
+            </h2>
+            <p className="text-sm font-semibold text-zinc-300 animate-pulse bg-white/10 px-5 py-1.5 rounded-full backdrop-blur-md border border-white/15">
+              Ringing...
+            </p>
+          </div>
+        </div>
+
+        {/* Bottom Call Accept / Cancel Action Buttons */}
+        <div className="relative z-10 flex items-center justify-around w-full max-w-xs gap-8">
+          {/* Decline / Cancel Call Button */}
+          <button 
+            onClick={rejectCall} 
+            className="flex flex-col items-center gap-2 group cursor-pointer" 
+            title="Decline / Cancel Call"
+          >
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-red-600 to-rose-500 text-white flex items-center justify-center group-hover:from-red-700 group-hover:to-rose-600 transition-all shadow-2xl shadow-red-500/60 ring-4 ring-red-500/30 active:scale-95">
+              <PhoneOff size={32} className="rotate-[135deg]" />
             </div>
-          </div>
-          <h2 className="text-2xl font-bold text-white mb-1">Incoming Call</h2>
-          <p className="text-zinc-400 mb-8 capitalize font-medium">{incomingCall.type} call</p>
-          
-          <div className="flex gap-8 w-full justify-center">
-             <button onClick={rejectCall} className="flex flex-col items-center gap-2 group cursor-pointer" title="Decline Call">
-               <div className="w-16 h-16 rounded-full bg-red-500/20 text-red-500 flex items-center justify-center group-hover:bg-red-500 group-hover:text-white transition-all shadow-lg active:scale-95">
-                  <PhoneOff size={28} className="rotate-[135deg]" />
-               </div>
-               <span className="text-sm font-medium text-red-500 group-hover:text-red-400 transition-colors">Decline</span>
-             </button>
-             <button onClick={acceptCall} className="flex flex-col items-center gap-2 group cursor-pointer" title="Accept Call">
-               <div className="w-16 h-16 rounded-full bg-green-500/20 text-green-500 flex items-center justify-center group-hover:bg-green-500 group-hover:text-white transition-all shadow-lg active:scale-95">
-                  <Phone size={28} className="animate-bounce" />
-               </div>
-               <span className="text-sm font-medium text-green-500 group-hover:text-green-400 transition-colors">Accept</span>
-             </button>
-          </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-red-400 group-hover:text-red-300 transition-colors">
+              Decline
+            </span>
+          </button>
+
+          {/* Accept Call Button */}
+          <button 
+            onClick={acceptCall} 
+            className="flex flex-col items-center gap-2 group cursor-pointer" 
+            title="Accept Call"
+          >
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-green-500 text-white flex items-center justify-center group-hover:from-emerald-600 group-hover:to-green-600 transition-all shadow-2xl shadow-green-500/60 ring-4 ring-green-500/30 active:scale-95">
+              <Phone size={32} className="animate-bounce" />
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-green-400 group-hover:text-green-300 transition-colors">
+              Accept
+            </span>
+          </button>
         </div>
       </div>
     );
@@ -625,11 +669,11 @@ export default function CallModal() {
               <Users size={24} className="text-brand-400" />
             </div>
           ) : (
-            <Avatar size="md" className="ring-2 ring-white/30" />
+            <Avatar size="md" src={receiverProfile?.avatar_url} className="ring-2 ring-white/30" />
           )}
           <div>
             <h2 className="text-xl font-bold text-white drop-shadow-md">
-              {isGroupCall ? (activeCall?.groupName || 'Group Video Call') : (activeCall?.type === 'video' ? 'Video Call' : 'Voice Call')}
+              {isGroupCall ? (activeCall?.groupName || 'Group Call') : (receiverProfile?.display_name || 'Call')}
             </h2>
             <p className="text-xs text-zinc-300 font-medium flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse" />
@@ -698,16 +742,18 @@ export default function CallModal() {
             ))}
           </div>
         ) : (
-          /* Single 1-on-1 Call View (Full Screen) */
+          /* Single 1-on-1 Call View (Full Screen - No floating side box) */
           <div className="absolute inset-0 w-full h-full flex items-center justify-center overflow-hidden">
             {activeCall?.type === 'video' ? (
               <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black">
                 <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
                 {!remoteStream && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/50 backdrop-blur-md">
-                    <Avatar size="2xl" src={receiverProfile?.avatar_url} className="ring-4 ring-white/30 shadow-2xl mb-4" />
-                    <h3 className="text-2xl font-bold text-white mb-2">{receiverProfile?.display_name || 'User'}</h3>
-                    <p className="text-sm font-semibold text-white animate-pulse bg-black/60 px-6 py-2 rounded-full backdrop-blur-md border border-white/20">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/40 backdrop-blur-md">
+                    <Avatar size="2xl" src={receiverProfile?.avatar_url} className="ring-4 ring-white/40 shadow-2xl mb-4" />
+                    <h3 className="text-3xl font-extrabold text-white mb-2 tracking-tight drop-shadow-lg">
+                      {receiverProfile?.display_name || 'User'}
+                    </h3>
+                    <p className="text-sm font-semibold text-white animate-pulse bg-black/60 px-6 py-2 rounded-full backdrop-blur-md border border-white/20 shadow-xl">
                       {activeCall?.status === 'ringing' ? 'Ringing...' : 'Calling...'}
                     </p>
                   </div>
@@ -717,12 +763,12 @@ export default function CallModal() {
               <div className="flex flex-col items-center justify-center text-center z-10 p-6">
                 <div className="relative mb-6">
                   <div className="absolute inset-0 rounded-full bg-brand-500/30 animate-ping" />
-                  <Avatar size="2xl" src={receiverProfile?.avatar_url} className="ring-4 ring-white/30 shadow-2xl relative z-10" />
+                  <Avatar size="2xl" src={receiverProfile?.avatar_url} className="ring-4 ring-white/40 shadow-2xl relative z-10" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2 drop-shadow-md">
+                <h3 className="text-3xl font-extrabold text-white mb-2 tracking-tight drop-shadow-lg">
                   {receiverProfile?.display_name || 'User'}
                 </h3>
-                <span className="px-4 py-1.5 rounded-full bg-black/50 backdrop-blur-md text-sm font-semibold text-zinc-100 border border-white/10 shadow-lg">
+                <span className="px-5 py-2 rounded-full bg-black/60 backdrop-blur-md text-sm font-semibold text-zinc-100 border border-white/20 shadow-xl">
                   {activeCall?.status === 'connected' ? 'Voice Call Connected' : (activeCall?.status === 'ringing' ? 'Ringing...' : 'Calling...')}
                 </span>
                 {activeCall?.status === 'connected' && <audio ref={remoteVideoRef} autoPlay />}
@@ -731,19 +777,6 @@ export default function CallModal() {
           </div>
         )}
       </div>
-
-      {/* Picture-in-Picture Local Video (For 1-on-1 Calls) */}
-      {!isGroupCall && activeCall?.type === 'video' && (
-        <div className="absolute top-24 right-6 w-32 h-48 bg-black/90 rounded-3xl overflow-hidden shadow-2xl ring-2 ring-white/30 z-30 cursor-pointer transition-all active:scale-95">
-          <video ref={localVideoRef} autoPlay playsInline muted className={cn("h-full w-full object-cover", !cameraOn && "hidden")} />
-          {!cameraOn && (
-            <div className="flex flex-col h-full w-full items-center justify-center bg-zinc-900">
-              <Avatar size="sm" src={profile?.avatar_url} />
-              <span className="text-[10px] text-zinc-400 mt-1">Off</span>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Live Call Background Picker Drawer */}
       {showBgPicker && (
@@ -836,13 +869,13 @@ export default function CallModal() {
           <ImageIcon size={24} />
         </button>
 
-        {/* End Call Button */}
+        {/* End Call / Cancel Call Button */}
         <button 
           onClick={() => endCall()} 
-          title="End Call" 
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 hover:bg-red-700 text-white transition-all active:scale-95 shadow-2xl ring-4 ring-red-500/40 cursor-pointer pointer-events-auto"
+          title="Cancel / End Call" 
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-tr from-red-600 via-rose-600 to-red-500 hover:brightness-110 text-white transition-all active:scale-95 shadow-2xl shadow-red-600/70 ring-4 ring-red-500/40 cursor-pointer pointer-events-auto"
         >
-          <PhoneOff size={28} className="rotate-[135deg]" />
+          <PhoneOff size={30} className="rotate-[135deg]" />
         </button>
       </div>
     </div>
