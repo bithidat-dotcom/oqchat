@@ -20,7 +20,7 @@ export default function ProfileScreen() {
 
   return (
     <div className="flex h-full flex-col relative">
-      <div className="px-4 pt-6 pb-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+      <div className="px-4 pt-[10px] pb-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsSettingsModalOpen(true)}

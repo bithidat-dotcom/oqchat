@@ -77,12 +77,15 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   });
 
   const CALL_BACKGROUNDS = [
+    { name: 'Aesthetic Sunset (9:16)', url: 'https://i.pinimg.com/1200x/a2/c7/62/a2c762f9f30248a255b08c51c020cbf5.jpg' },
+    { name: 'Sky Anime Glow (9:16)', url: 'https://i.pinimg.com/736x/4c/b3/a1/4cb3a11088f8031e28885a89426efea2.jpg' },
+    { name: 'Purple Night Clouds (9:16)', url: 'https://i.pinimg.com/1200x/3b/4f/9c/3b4f9cd70c8878e2677d57990c039015.jpg' },
+    { name: 'Cloud Aesthetic', url: '/b591a35959ec10ab5079ba55b1d02d59.jpg' },
+    { name: 'Deep Blue Horizon', url: '/7c77a6d897ab20299f621a8d316df795.jpg' },
     { name: 'Dark Minimal', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop' },
     { name: 'Abstract Pink/Blue', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop' },
     { name: 'Colorful Gradient', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop' },
     { name: 'Dark Blue Gradient', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop' },
-    { name: 'Cloud Aesthetic', url: '/b591a35959ec10ab5079ba55b1d02d59.jpg' },
-    { name: 'Deep Blue Horizon', url: '/7c77a6d897ab20299f621a8d316df795.jpg' },
   ];
 
   const CHAT_WALLPAPERS = [

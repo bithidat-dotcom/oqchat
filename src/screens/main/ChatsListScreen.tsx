@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChatStore, Conversation } from '../../store/chatStore';
 import { Avatar } from '../../components/ui/Avatar';
-import { Search, Plus, MessageSquare, Trash2, AlertCircle, Ban, Mail, CheckCircle2, MoreVertical, X, Phone, Video, Lock } from 'lucide-react';
+import { Search, Plus, MessageSquare, Trash2, AlertCircle, Ban, Mail, CheckCircle2, MoreVertical, X, Phone, Video, Lock, Bell } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Button } from '../../components/ui/Button';
 import NewChatModal from './NewChatModal';
@@ -192,7 +192,7 @@ export default function ChatsListScreen() {
   return (
     <div className="flex h-full flex-col relative">
       {/* Header */}
-      <div className="px-4 pt-6 pb-2">
+      <div className="px-4 pt-[10px] pb-2">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-sm overflow-hidden">
@@ -200,15 +200,35 @@ export default function ChatsListScreen() {
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {currentUserProfile && (
-              <span className="text-sm font-medium text-zinc-600 dark:text-zinc-300">
+              <span className="hidden sm:inline text-sm font-medium text-zinc-600 dark:text-zinc-300 mr-1">
                 {currentUserProfile.display_name}
               </span>
             )}
+
+            {/* Notification Bell Button */}
+            <button
+              onClick={() => toast('No new notifications', { icon: '🔔' })}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-all active:scale-95 shadow-sm"
+              title="Notifications"
+            >
+              <Bell size={18} />
+            </button>
+
+            {/* Call History Button */}
+            <button
+              onClick={() => navigate('/calls')}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-all active:scale-95 shadow-sm"
+              title="Call History & Calls"
+            >
+              <Phone size={18} />
+            </button>
+
+            {/* New Chat Button */}
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-[#88FF00] to-[#8EFE00] text-zinc-950 transition-all hover:brightness-105 active:scale-95 shadow-md shadow-[#88FF00]/25"
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#88FF00] to-[#8EFE00] text-zinc-950 transition-all hover:brightness-105 active:scale-95 shadow-md shadow-[#88FF00]/25"
               title="New Chat"
             >
               <Plus size={20} strokeWidth={2.5} />

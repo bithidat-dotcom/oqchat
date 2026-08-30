@@ -4,7 +4,7 @@ import { useChatStore, Message } from '../store/chatStore';
 import { useAuthStore } from '../store/authStore';
 import { useCallStore } from '../store/callStore';
 import { Avatar } from '../components/ui/Avatar';
-import { ChevronLeft, ChevronRight, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, CornerDownRight, Check, CheckCheck, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users, Maximize2, Download, Lock, Film, Settings, Link as LinkIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Phone, Video, MoreVertical, Send, Paperclip, Smile, Mic, Search, X, Play, Pause, Image as ImageIcon, VolumeX, Volume2, Trash2, Reply, Forward, Edit2, Edit3, Clock, CornerDownRight, Check, CheckCheck, AlertCircle, BarChart2, Shield, ShieldAlert, ShieldCheck, Award, Plus, Trash, Globe, Users, Maximize2, Download, Lock, Film, Settings, Link as LinkIcon, Bell, BellOff } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
 import toast from 'react-hot-toast';
@@ -256,9 +256,12 @@ export default function ChatScreen() {
     setCalling(true);
     setActiveCall({
       caller: user.uid,
-      receiver: isSelf ? user.uid : otherMember.id,
+      receiver: isGroupOrCommunity ? conversationId : (isSelf ? user.uid : otherMember.id),
       type,
-      status: 'initiating'
+      status: 'initiating',
+      isGroupCall: isGroupOrCommunity,
+      groupName: isGroupOrCommunity ? otherMember.display_name : undefined,
+      members: isGroupOrCommunity ? (conversation.members || []) : undefined
     });
   };
 
@@ -733,13 +736,6 @@ export default function ChatScreen() {
             >
               <div className="relative shrink-0">
                 <Avatar src={otherMember?.avatar_url} online={isOnline} size="md" />
-                {isGroupOrCommunity && (
-                  <div className="absolute -bottom-1 -right-1 flex -space-x-2 p-0.5 rounded-full bg-white dark:bg-zinc-950 scale-75">
-                    {conversation?.members?.slice(0, 2).map((m: any) => (
-                      <Avatar key={m.id} src={m.avatar_url} size="xs" className="ring-1 ring-white dark:ring-zinc-950" />
-                    ))}
-                  </div>
-                )}
               </div>
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-1.5 min-w-0">
@@ -759,24 +755,20 @@ export default function ChatScreen() {
           </div>
 
           <div className="flex items-center gap-1">
-            {!isGroupOrCommunity && (
-              <>
-                <button 
-                  onClick={() => handleCall('voice')}
-                  title={isSelf ? "Call yourself" : "Voice call"}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
-                >
-                  <Phone size={20} />
-                </button>
-                <button 
-                  onClick={() => handleCall('video')}
-                  title={isSelf ? "Video call yourself" : "Video call"}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
-                >
-                  <Video size={22} />
-                </button>
-              </>
-            )}
+            <button 
+              onClick={() => handleCall('voice')}
+              title={isGroupOrCommunity ? "Group Voice Call" : (isSelf ? "Call yourself" : "Voice call")}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+            >
+              <Phone size={20} />
+            </button>
+            <button 
+              onClick={() => handleCall('video')}
+              title={isGroupOrCommunity ? "Group Video Call" : (isSelf ? "Video call yourself" : "Video call")}
+              className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+            >
+              <Video size={22} />
+            </button>
             
             <div className="relative">
               <button 
@@ -921,19 +913,24 @@ export default function ChatScreen() {
                   <div 
                     onDoubleClick={(e) => {
                       e.stopPropagation();
-                      setSelectedMsg(msg);
-                      if (isMe && msg.message_type === 'text' && !msg.deleted_at) {
-                        setEditingMsg(msg);
-                        setEditText(msg.content || '');
+                      // Double tap ONLY for image messages
+                      if (msg.message_type === 'image' && msg.media_url) {
+                        setLightboxMedia({ url: msg.media_url, type: 'image' });
+                        toast('Image Enlarged', { icon: '🔍' });
                       }
                     }}
                     onClick={(e) => {
                       if (msg.message_type === 'image' && msg.media_url) {
                         e.stopPropagation();
+                        // 1 tap on image opens lightbox or options
                         setLightboxMedia({ url: msg.media_url, type: 'image' });
                       } else if (msg.message_type === 'video' && msg.media_url) {
                         e.stopPropagation();
                         setLightboxMedia({ url: msg.media_url, type: 'video' });
+                      } else {
+                        // 1 tap or slide on text/voice message opens Message Options Sheet
+                        e.stopPropagation();
+                        setSelectedMsg(msg);
                       }
                     }}
                     className={cn(
@@ -1157,38 +1154,43 @@ export default function ChatScreen() {
                     </button>
                   </div>
                 </div>
-                {isMe && (
-                  <div className="mt-1 text-[10px] text-zinc-400 flex items-center justify-end gap-1.5 px-0.5 select-none">
-                    {msg.updated_at !== msg.created_at && <span className="italic">(edited)</span>}
-                    {(() => {
-                      const isSeen = seenOverrideMap[msg.id] ?? (msg.status === 'read' || (msg.status as string) === 'seen');
-                      return (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newStatus = !isSeen;
-                            setSeenOverrideMap(prev => ({ ...prev, [msg.id]: newStatus }));
-                            toast(newStatus ? 'Message marked as Seen' : 'Message marked as Unseen', {
-                              icon: newStatus ? '👁️' : '🙈'
-                            });
-                          }}
-                          className="flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group/status"
-                          title={isSeen ? "Seen - Click to mark as Unseen" : "Unseen - Click to mark as Seen"}
-                        >
-                          <span className="text-[10px] font-medium opacity-80 group-hover/status:opacity-100">
-                            {isSeen ? 'Seen' : 'Unseen'}
-                          </span>
-                          {isSeen ? (
-                            <CheckCheck size={14} className="text-[#88FF00] drop-shadow-[0_0_3px_rgba(136,255,0,0.5)]" />
-                          ) : (
-                            <CheckCheck size={14} className="text-zinc-400 opacity-70" />
-                          )}
-                        </button>
-                      );
-                    })()}
-                  </div>
-                )}
+                <div className="mt-1 text-[10px] text-zinc-400 flex items-center justify-between gap-1.5 px-0.5 select-none">
+                  <span className="font-medium text-zinc-400">
+                    {format(new Date(msg.created_at), 'h:mm a')}
+                  </span>
+                  {isMe && (
+                    <div className="flex items-center gap-1.5">
+                      {msg.updated_at !== msg.created_at && <span className="italic">(edited)</span>}
+                      {(() => {
+                        const isSeen = seenOverrideMap[msg.id] ?? (msg.status === 'read' || (msg.status as string) === 'seen');
+                        return (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newStatus = !isSeen;
+                              setSeenOverrideMap(prev => ({ ...prev, [msg.id]: newStatus }));
+                              toast(newStatus ? 'Message marked as Seen' : 'Message marked as Unseen', {
+                                icon: newStatus ? '👁️' : '🙈'
+                              });
+                            }}
+                            className="flex items-center gap-1 hover:text-zinc-200 transition-colors cursor-pointer group/status"
+                            title={isSeen ? "Seen - Click to mark as Unseen" : "Unseen - Click to mark as Seen"}
+                          >
+                            <span className="text-[10px] font-medium opacity-80 group-hover/status:opacity-100">
+                              {isSeen ? 'Seen' : 'Unseen'}
+                            </span>
+                            {isSeen ? (
+                              <CheckCheck size={14} className="text-[#88FF00] drop-shadow-[0_0_3px_rgba(136,255,0,0.5)]" />
+                            ) : (
+                              <CheckCheck size={14} className="text-zinc-400 opacity-70" />
+                            )}
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })
@@ -1366,12 +1368,40 @@ export default function ChatScreen() {
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors dark:hover:bg-zinc-800 dark:hover:text-zinc-300",
                 isSendingMedia ? "opacity-50 cursor-not-allowed" : "hover:bg-zinc-100 hover:text-zinc-600"
               )}
+              title="Add Media / Attachment (+)"
             >
               {isSendingMedia ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
               ) : (
-                <Paperclip size={20} />
+                <Plus size={22} strokeWidth={2.5} />
               )}
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => {
+                const nextMute = !isMuted;
+                setIsMuted(nextMute);
+                toast.success(nextMute ? 'Notifications muted for this chat' : 'Notifications unmuted for this chat');
+              }}
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-colors dark:hover:bg-zinc-800",
+                isMuted 
+                  ? "bg-amber-500/10 text-amber-500 dark:bg-amber-500/20" 
+                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:text-zinc-300"
+              )}
+              title={isMuted ? "Unmute Notifications" : "Mute Notifications"}
+            >
+              {isMuted ? <BellOff size={20} /> : <Bell size={20} />}
+            </button>
+
+            <button 
+              type="button" 
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition-colors"
+              title="Attach File"
+            >
+              <Paperclip size={20} />
             </button>
 
             <button 
@@ -2021,6 +2051,115 @@ export default function ChatScreen() {
                     Video
                   </button>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message Options Action Sheet Modal (1-tap/slide on text message) */}
+      {selectedMsg && (
+        <div 
+          onClick={() => setSelectedMsg(null)}
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in slide-in-from-bottom-4 duration-200 space-y-3"
+          >
+            {/* Header with Timestamp */}
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">Message Details</span>
+                <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1 mt-0.5">
+                  <Clock size={12} className="text-brand-500" />
+                  {format(new Date(selectedMsg.created_at), 'MMMM d, yyyy • h:mm a')}
+                </span>
+              </div>
+              <button 
+                onClick={() => setSelectedMsg(null)}
+                className="p-1.5 rounded-full text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Message Content Preview */}
+            <div className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/60 text-xs text-zinc-700 dark:text-zinc-300 max-h-24 overflow-y-auto italic">
+              "{selectedMsg.content || (selectedMsg.message_type === 'image' ? '📷 Photo' : 'Voice Message')}"
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-1.5 pt-1">
+              {/* Reply */}
+              <button
+                onClick={() => {
+                  setReplyToMsg(selectedMsg);
+                  setSelectedMsg(null);
+                }}
+                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-brand-50 dark:hover:bg-brand-500/10 text-brand-600 dark:text-brand-400 font-semibold text-sm transition-colors text-left"
+              >
+                <Reply size={18} />
+                <span>Reply</span>
+              </button>
+
+              {/* Edit (if sent by user & text) */}
+              {selectedMsg.sender_id === user?.uid && selectedMsg.message_type === 'text' && (
+                <button
+                  onClick={() => {
+                    setEditingMsg(selectedMsg);
+                    setEditText(selectedMsg.content || '');
+                    setSelectedMsg(null);
+                  }}
+                  className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-800 font-semibold text-sm transition-colors text-left"
+                >
+                  <Edit3 size={18} className="text-blue-500" />
+                  <span>Edit Message</span>
+                </button>
+              )}
+
+              {/* Forward */}
+              <button
+                onClick={() => {
+                  setForwardingMsg(selectedMsg);
+                  setSelectedMsg(null);
+                }}
+                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-800 font-semibold text-sm transition-colors text-left"
+              >
+                <Forward size={18} className="text-purple-500" />
+                <span>Forward</span>
+              </button>
+
+              {/* Delete for me */}
+              <button
+                onClick={() => {
+                  if (conversationId) {
+                    deleteMessageForMe(conversationId, selectedMsg.id);
+                    toast.success('Message deleted for you');
+                    setSelectedMsg(null);
+                  }
+                }}
+                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-sm transition-colors text-left"
+              >
+                <Trash2 size={18} />
+                <span>Delete for Me</span>
+              </button>
+
+              {/* Delete for everyone */}
+              {(selectedMsg.sender_id === user?.uid || otherMember?.admins?.includes(user?.uid)) && (
+                <button
+                  onClick={() => {
+                    if (conversationId) {
+                      deleteMessage(conversationId, selectedMsg.id);
+                      toast.success('Message deleted for everyone');
+                      setSelectedMsg(null);
+                    }
+                  }}
+                  className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10 text-red-600 dark:text-red-400 font-semibold text-sm transition-colors text-left"
+                >
+                  <Trash size={18} />
+                  <span>Delete for Everyone</span>
+                </button>
               )}
             </div>
           </div>

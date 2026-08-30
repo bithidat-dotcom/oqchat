@@ -121,7 +121,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   })),
 
   deleteMessage: async (conversationId, messageId) => {
-    await deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageId));
+    try {
+      await deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageId));
+    } catch (err) {
+      console.error("Error deleting Firestore message doc:", err);
+    }
+    set((state) => ({
+      messages: {
+        ...state.messages,
+        [conversationId]: (state.messages[conversationId] || []).filter(m => m.id !== messageId)
+      }
+    }));
   },
 
   deleteMessageForMe: async (conversationId, messageId) => {
@@ -152,12 +162,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   deleteConversation: async (conversationId) => {
-    await deleteDoc(doc(db, 'conversations', conversationId));
+    try {
+      const q = collection(db, 'conversations', conversationId, 'messages');
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => {
+        batch.delete(d.ref);
+      });
+      batch.delete(doc(db, 'conversations', conversationId));
+      await batch.commit();
+    } catch (err) {
+      console.error("Error deleting conversation in Firestore:", err);
+      await deleteDoc(doc(db, 'conversations', conversationId)).catch(() => {});
+    }
+    set((state) => ({
+      conversations: state.conversations.filter(c => c.id !== conversationId),
+      messages: { ...state.messages, [conversationId]: [] }
+    }));
   },
 
   clearMessages: async (conversationId) => {
-    // In a real app we'd delete all docs in the subcollection using a batch or Edge function
-    // For now we just clear local state for this demo
+    try {
+      const q = collection(db, 'conversations', conversationId, 'messages');
+      const snap = await getDocs(q);
+      const batch = writeBatch(db);
+      snap.docs.forEach((d) => {
+        batch.delete(d.ref);
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error("Error clearing messages in Firestore:", err);
+    }
     set((state) => ({
       messages: { ...state.messages, [conversationId]: [] }
     }));
