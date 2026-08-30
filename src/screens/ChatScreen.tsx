@@ -1116,7 +1116,7 @@ export default function ChatScreen() {
                   </div>
 
                   {/* Quick Action buttons (Reply, Forward, Delete for Me) */}
-                  <div className="opacity-0 group-hover/bubble:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0 px-1">
+                  <div className="opacity-0 group-hover/bubble:opacity-100 transition-opacity flex items-center gap-1 shrink-0 px-1">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1124,7 +1124,7 @@ export default function ChatScreen() {
                         setReplyToMsg(msg);
                       }}
                       title="Reply"
-                      className="p-1.5 text-zinc-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                      className="p-1.5 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-full transition-colors"
                     >
                       <Reply size={14} />
                     </button>
@@ -1135,7 +1135,7 @@ export default function ChatScreen() {
                         setForwardingMsg(msg);
                       }}
                       title="Forward"
-                      className="p-1.5 text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                      className="p-1.5 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 rounded-full transition-colors"
                     >
                       <Forward size={14} />
                     </button>
@@ -1149,7 +1149,7 @@ export default function ChatScreen() {
                         }
                       }}
                       title="Delete for me"
-                      className="p-1.5 text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-full transition-colors"
+                      className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-full transition-colors"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -2123,16 +2123,16 @@ export default function ChatScreen() {
             </div>
 
             {/* Action Buttons */}
-            <div className="space-y-1.5 pt-1">
+            <div className="space-y-2 pt-1">
               {/* Reply */}
               <button
                 onClick={() => {
                   setReplyToMsg(selectedMsg);
                   setSelectedMsg(null);
                 }}
-                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-brand-50 dark:hover:bg-brand-500/10 text-brand-600 dark:text-brand-400 font-semibold text-sm transition-colors text-left"
+                className="flex w-full items-center gap-3 p-3 rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-semibold text-sm transition-colors text-left"
               >
-                <Reply size={18} />
+                <Reply size={18} className="text-blue-500" />
                 <span>Reply</span>
               </button>
 
@@ -2144,9 +2144,9 @@ export default function ChatScreen() {
                     setEditText(selectedMsg.content || '');
                     setSelectedMsg(null);
                   }}
-                  className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-800 font-semibold text-sm transition-colors text-left"
+                  className="flex w-full items-center gap-3 p-3 rounded-2xl bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/60 font-semibold text-sm transition-colors text-left"
                 >
-                  <Edit3 size={18} className="text-blue-500" />
+                  <Edit3 size={18} className="text-amber-500" />
                   <span>Edit Message</span>
                 </button>
               )}
@@ -2157,9 +2157,9 @@ export default function ChatScreen() {
                   setForwardingMsg(selectedMsg);
                   setSelectedMsg(null);
                 }}
-                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-zinc-100 dark:hover:bg-zinc-800 font-semibold text-sm transition-colors text-left"
+                className="flex w-full items-center gap-3 p-3 rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 font-semibold text-sm transition-colors text-left"
               >
-                <Forward size={18} className="text-purple-500" />
+                <Forward size={18} className="text-emerald-500" />
                 <span>Forward</span>
               </button>
 
@@ -2172,9 +2172,9 @@ export default function ChatScreen() {
                     setSelectedMsg(null);
                   }
                 }}
-                className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-sm transition-colors text-left"
+                className="flex w-full items-center gap-3 p-3 rounded-2xl bg-purple-50 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/60 font-semibold text-sm transition-colors text-left"
               >
-                <Trash2 size={18} />
+                <Trash2 size={18} className="text-purple-500" />
                 <span>Delete for Me</span>
               </button>
 
@@ -2188,9 +2188,9 @@ export default function ChatScreen() {
                       setSelectedMsg(null);
                     }
                   }}
-                  className="flex w-full items-center gap-3 p-3 rounded-2xl hover:bg-red-50 dark:hover:bg-red-500/10 text-red-600 dark:text-red-400 font-semibold text-sm transition-colors text-left"
+                  className="flex w-full items-center gap-3 p-3 rounded-2xl bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/60 font-semibold text-sm transition-colors text-left"
                 >
-                  <Trash size={18} />
+                  <Trash size={18} className="text-red-500" />
                   <span>Delete for Everyone</span>
                 </button>
               )}

@@ -17,10 +17,9 @@ const ICE_SERVERS = {
 
 const CALL_BACKGROUNDS = [
   { name: 'Aesthetic Sunset (9:16)', url: 'https://i.pinimg.com/1200x/a2/c7/62/a2c762f9f30248a255b08c51c020cbf5.jpg' },
+  { name: 'Anime Sky Glow (9:16)', url: 'https://i.pinimg.com/736x/86/82/ac/8682ac3264f7b7210e92b4963ec73a82.jpg' },
   { name: 'Sky Anime Glow (9:16)', url: 'https://i.pinimg.com/736x/4c/b3/a1/4cb3a11088f8031e28885a89426efea2.jpg' },
   { name: 'Purple Night Clouds (9:16)', url: 'https://i.pinimg.com/1200x/3b/4f/9c/3b4f9cd70c8878e2677d57990c039015.jpg' },
-  { name: 'Cloud Aesthetic', url: '/b591a35959ec10ab5079ba55b1d02d59.jpg' },
-  { name: 'Deep Blue Horizon', url: '/7c77a6d897ab20299f621a8d316df795.jpg' },
   { name: 'Dark Minimal', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop' },
   { name: 'Abstract Pink/Blue', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop' },
   { name: 'Colorful Gradient', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop' },
@@ -89,12 +88,13 @@ export default function CallModal() {
   const [receiverProfile, setReceiverProfile] = useState<{ display_name?: string; avatar_url?: string } | null>(null);
 
   useEffect(() => {
-    if (!activeCall || !user) {
+    const targetCall = activeCall || incomingCall;
+    if (!targetCall || !user) {
       setReceiverProfile(null);
       return;
     }
 
-    const otherUserId = activeCall.caller === user.uid ? activeCall.receiver : activeCall.caller;
+    const otherUserId = targetCall.caller === user.uid ? targetCall.receiver : targetCall.caller;
     if (!otherUserId) return;
 
     try {
@@ -115,7 +115,7 @@ export default function CallModal() {
     }, () => {});
 
     return () => unsub();
-  }, [activeCall, user]);
+  }, [activeCall, incomingCall, user]);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -276,7 +276,13 @@ export default function CallModal() {
 
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
+      const videoConstraints = isVideo ? {
+        width: { ideal: 720 },
+        height: { ideal: 1280 },
+        aspectRatio: { ideal: 9 / 16 },
+        facingMode
+      } : false;
+      stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: true });
     } catch (e) {
       console.warn("Primary getUserMedia failed, attempting audio only or fallback stream:", e);
       try {
@@ -333,6 +339,8 @@ export default function CallModal() {
       await setDoc(doc(db, 'calls', callId), {
         offer: { type: offer.type, sdp: offer.sdp },
         caller: user.uid,
+        callerName: profile?.display_name || (user as any)?.displayName || (user as any)?.phone || 'Caller',
+        callerAvatar: profile?.avatar_url || '',
         receiver: otherUserId,
         status: 'calling',
         type: isVideo ? 'video' : 'voice',
@@ -594,21 +602,18 @@ export default function CallModal() {
           <span className="text-xs text-zinc-400 font-medium">End-to-End Encrypted</span>
         </div>
 
-        {/* Center Profile & Glowing Ring Avatar */}
+        {/* Center Info & Call Status */}
         <div className="relative z-10 flex flex-col items-center text-center space-y-4 my-auto">
           <div className="relative flex items-center justify-center">
             {/* Pulsating Radar Aura Rings */}
-            <div className="absolute w-44 h-44 rounded-full bg-brand-500/20 animate-ping duration-1000" />
-            <div className="absolute w-56 h-56 rounded-full bg-brand-500/10 animate-pulse duration-1000" />
-            <Avatar 
-              size="2xl" 
-              src={receiverProfile?.avatar_url} 
-              className="relative z-10 ring-4 ring-brand-500/80 shadow-[0_0_50px_rgba(136,255,0,0.4)]" 
-            />
+            <div className="absolute w-36 h-36 rounded-full bg-brand-500/20 animate-ping duration-1000" />
+            <div className="w-24 h-24 rounded-full bg-brand-500/20 border-2 border-brand-500/50 flex items-center justify-center relative z-10 shadow-[0_0_50px_rgba(136,255,0,0.3)] backdrop-blur-md">
+              <Phone size={40} className="text-brand-400 animate-pulse" />
+            </div>
           </div>
           <div className="space-y-1">
             <h2 className="text-3xl font-extrabold text-white tracking-tight drop-shadow-md">
-              {receiverProfile?.display_name || incomingCall.callerName || 'Incoming Call'}
+              {receiverProfile?.display_name || incomingCall.callerName || (incomingCall.isGroupCall ? incomingCall.groupName : 'Caller')}
             </h2>
             <p className="text-sm font-semibold text-zinc-300 animate-pulse bg-white/10 px-5 py-1.5 rounded-full backdrop-blur-md border border-white/15">
               Ringing...
@@ -624,8 +629,8 @@ export default function CallModal() {
             className="flex flex-col items-center gap-2 group cursor-pointer" 
             title="Decline / Cancel Call"
           >
-            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-red-600 to-rose-500 text-white flex items-center justify-center group-hover:from-red-700 group-hover:to-rose-600 transition-all shadow-2xl shadow-red-500/60 ring-4 ring-red-500/30 active:scale-95">
-              <PhoneOff size={32} className="rotate-[135deg]" />
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-red-600 to-rose-600 text-white flex items-center justify-center group-hover:from-red-700 group-hover:to-rose-700 transition-all shadow-2xl shadow-red-500/60 ring-4 ring-red-500/30 active:scale-95">
+              <PhoneOff size={32} className="text-white" />
             </div>
             <span className="text-xs font-bold uppercase tracking-wider text-red-400 group-hover:text-red-300 transition-colors">
               Decline
@@ -661,22 +666,14 @@ export default function CallModal() {
         <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/80" />
       </div>
 
-      {/* Group Call Header / Single Call Header */}
+      {/* Call Header */}
       <div className="relative z-20 pt-10 px-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {isGroupCall ? (
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500/30 backdrop-blur-md ring-2 ring-brand-500/50">
-              <Users size={24} className="text-brand-400" />
-            </div>
-          ) : (
-            <Avatar size="md" src={receiverProfile?.avatar_url} className="ring-2 ring-white/30" />
-          )}
           <div>
             <h2 className="text-xl font-bold text-white drop-shadow-md">
               {isGroupCall ? (activeCall?.groupName || 'Group Call') : (receiverProfile?.display_name || 'Call')}
             </h2>
-            <p className="text-xs text-zinc-300 font-medium flex items-center gap-2">
-              <span className="inline-block h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+            <p className="text-xs text-zinc-300 font-medium">
               {activeCall?.status === 'connected' ? 'Connected' : (activeCall?.status === 'ringing' ? 'Ringing...' : 'Calling...')}
             </p>
           </div>
@@ -701,19 +698,18 @@ export default function CallModal() {
         </div>
       </div>
 
-      {/* Live Video / Main Content Grid */}
+      {/* Live Video / Main Content Grid (Strict 9:16 Portrait Ratio Layout) */}
       <div className="relative z-10 flex-1 flex items-center justify-center overflow-hidden w-full h-full">
         {isGroupCall ? (
-          /* Multi-Participant Group Call Grid */
+          /* Multi-Participant Group Call Grid (9:16 Aspect Ratio Tiles) */
           <div className="w-full max-w-4xl grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 h-full max-h-[75vh] items-center justify-center z-10">
             {/* User Tile */}
-            <div className="relative aspect-square sm:aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-900/80 ring-2 ring-brand-500/50 shadow-2xl flex flex-col items-center justify-center">
+            <div className="relative aspect-[9/16] rounded-3xl overflow-hidden bg-zinc-900/80 ring-2 ring-brand-500/50 shadow-2xl flex flex-col items-center justify-center">
               {activeCall?.type === 'video' && cameraOn ? (
                 <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
               ) : (
                 <div className="flex flex-col items-center justify-center p-4">
-                  <Avatar size="lg" src={profile?.avatar_url} />
-                  <span className="text-xs font-semibold text-white mt-2">You (Host)</span>
+                  <span className="text-xs font-semibold text-white">You (Host)</span>
                 </div>
               )}
               <div className="absolute bottom-2 left-2 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md text-[11px] font-medium text-white flex items-center gap-1.5">
@@ -724,13 +720,12 @@ export default function CallModal() {
 
             {/* Other Members Tiles */}
             {groupMembers.filter((m: any) => m.id !== user?.uid).map((member: any, idx: number) => (
-              <div key={member.id || idx} className="relative aspect-square sm:aspect-[4/3] rounded-3xl overflow-hidden bg-zinc-900/60 ring-1 ring-white/20 backdrop-blur-md shadow-xl flex flex-col items-center justify-center">
+              <div key={member.id || idx} className="relative aspect-[9/16] rounded-3xl overflow-hidden bg-zinc-900/60 ring-1 ring-white/20 backdrop-blur-md shadow-xl flex flex-col items-center justify-center">
                 {idx === 0 && remoteStream && activeCall?.type === 'video' ? (
                   <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
                 ) : (
                   <div className="flex flex-col items-center justify-center p-4">
-                    <Avatar size="lg" src={member.avatar_url} />
-                    <span className="text-xs font-semibold text-white mt-2 truncate max-w-[100px]">{member.display_name || 'Member'}</span>
+                    <span className="text-xs font-semibold text-white truncate max-w-[100px]">{member.display_name || 'Member'}</span>
                     <span className="text-[10px] text-zinc-400 mt-0.5">In Call</span>
                   </div>
                 )}
@@ -742,15 +737,27 @@ export default function CallModal() {
             ))}
           </div>
         ) : (
-          /* Single 1-on-1 Call View (Full Screen - No floating side box) */
+          /* Single 1-on-1 Call View (Full Screen 9:16 Portrait Video + Floating Self-View PIP) */
           <div className="absolute inset-0 w-full h-full flex items-center justify-center overflow-hidden">
             {activeCall?.type === 'video' ? (
-              <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black">
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              <div className="relative inset-0 w-full h-full flex items-center justify-center bg-black overflow-hidden">
+                {/* Remote Video Stream (Full 9:16 Portrait Cover) */}
+                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover aspect-[9/16]" />
+                
+                {/* Floating Self Camera View PIP (9:16 Ratio) */}
+                {cameraOn && (
+                  <div className="absolute top-24 right-4 w-28 h-48 sm:w-36 sm:h-64 aspect-[9/16] rounded-2xl overflow-hidden ring-2 ring-white/30 shadow-2xl z-30 bg-zinc-900/80 backdrop-blur-md transition-all">
+                    <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                    <div className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-[10px] font-semibold text-white flex items-center gap-1">
+                      {micOn ? <Mic size={10} className="text-emerald-400" /> : <MicOff size={10} className="text-red-400" />}
+                      <span>You</span>
+                    </div>
+                  </div>
+                )}
+
                 {!remoteStream && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/40 backdrop-blur-md">
-                    <Avatar size="2xl" src={receiverProfile?.avatar_url} className="ring-4 ring-white/40 shadow-2xl mb-4" />
-                    <h3 className="text-3xl font-extrabold text-white mb-2 tracking-tight drop-shadow-lg">
+                    <h3 className="text-3xl font-extrabold text-white mb-3 tracking-tight drop-shadow-lg">
                       {receiverProfile?.display_name || 'User'}
                     </h3>
                     <p className="text-sm font-semibold text-white animate-pulse bg-black/60 px-6 py-2 rounded-full backdrop-blur-md border border-white/20 shadow-xl">
@@ -760,17 +767,14 @@ export default function CallModal() {
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center text-center z-10 p-6">
-                <div className="relative mb-6">
-                  <div className="absolute inset-0 rounded-full bg-brand-500/30 animate-ping" />
-                  <Avatar size="2xl" src={receiverProfile?.avatar_url} className="ring-4 ring-white/40 shadow-2xl relative z-10" />
-                </div>
-                <h3 className="text-3xl font-extrabold text-white mb-2 tracking-tight drop-shadow-lg">
-                  {receiverProfile?.display_name || 'User'}
-                </h3>
-                <span className="px-5 py-2 rounded-full bg-black/60 backdrop-blur-md text-sm font-semibold text-zinc-100 border border-white/20 shadow-xl">
-                  {activeCall?.status === 'connected' ? 'Voice Call Connected' : (activeCall?.status === 'ringing' ? 'Ringing...' : 'Calling...')}
-                </span>
+              /* Voice Call Screen - Clean Full View */
+              <div className="flex flex-col items-center justify-center text-center z-10 p-6 space-y-6">
+                {activeCall?.status === 'connected' && (
+                  <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 shadow-lg animate-pulse">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs font-semibold text-emerald-300">Audio Call Active</span>
+                  </div>
+                )}
                 {activeCall?.status === 'connected' && <audio ref={remoteVideoRef} autoPlay />}
               </div>
             )}
@@ -811,18 +815,18 @@ export default function CallModal() {
         </div>
       )}
 
-      {/* Full-screen Call Action Control Bar */}
-      <div className="relative z-50 p-4 sm:p-6 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex flex-wrap items-center justify-center gap-3 sm:gap-5 pointer-events-auto">
+      {/* Full-screen Call Action Control Bar (Perfect Single Row Layout) */}
+      <div className="relative z-50 w-full max-w-lg mx-auto p-4 pb-8 bg-gradient-to-t from-black via-black/80 to-transparent flex items-center justify-center gap-2.5 sm:gap-4 pointer-events-auto">
         {/* Mic Toggle */}
         <button 
           onClick={toggleMic} 
           title={micOn ? "Mute Mic" : "Unmute Mic"}
           className={cn(
-            "flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-xl transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto",
+            "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full backdrop-blur-xl transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0",
             micOn ? "bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/30" : "bg-white text-zinc-950 font-bold"
           )}
         >
-          {micOn ? <Mic size={24} /> : <MicOff size={24} />}
+          {micOn ? <Mic size={20} /> : <MicOff size={20} />}
         </button>
 
         {/* Video Camera Toggle */}
@@ -830,11 +834,11 @@ export default function CallModal() {
           onClick={toggleCamera} 
           title={cameraOn ? "Turn Camera Off" : "Turn Camera On"}
           className={cn(
-            "flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-xl transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto",
+            "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full backdrop-blur-xl transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0",
             cameraOn ? "bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/30" : "bg-white text-zinc-950 font-bold"
           )}
         >
-          {cameraOn ? <Video size={24} /> : <VideoOff size={24} />}
+          {cameraOn ? <Video size={20} /> : <VideoOff size={20} />}
         </button>
 
         {/* Flip Camera */}
@@ -842,9 +846,9 @@ export default function CallModal() {
           <button 
             onClick={switchCameraFacingMode}
             title={`Flip Camera (Current: ${facingMode === 'user' ? 'Front' : 'Back'})`}
-            className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl text-white ring-1 ring-white/30 transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto"
+            className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl text-white ring-1 ring-white/30 transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0"
           >
-            <SwitchCamera size={24} />
+            <SwitchCamera size={20} />
           </button>
         )}
 
@@ -853,29 +857,29 @@ export default function CallModal() {
           onClick={toggleSpeaker} 
           title={speakerOn ? "Mute Speaker" : "Enable Speaker"}
           className={cn(
-            "flex h-14 w-14 items-center justify-center rounded-full backdrop-blur-xl transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto",
+            "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full backdrop-blur-xl transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0",
             speakerOn ? "bg-white/15 hover:bg-white/25 text-white ring-1 ring-white/30" : "bg-amber-500 text-zinc-950 font-bold"
           )}
         >
-          {speakerOn ? <Volume2 size={24} /> : <VolumeX size={24} />}
+          {speakerOn ? <Volume2 size={20} /> : <VolumeX size={20} />}
         </button>
 
         {/* Background Quick Switcher */}
         <button 
           onClick={() => setShowBgPicker(prev => !prev)} 
           title="Choose Call Background Image"
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl text-white ring-1 ring-white/30 transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto"
+          className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl text-white ring-1 ring-white/30 transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0"
         >
-          <ImageIcon size={24} />
+          <ImageIcon size={20} />
         </button>
 
         {/* End Call / Cancel Call Button */}
         <button 
           onClick={() => endCall()} 
           title="Cancel / End Call" 
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-tr from-red-600 via-rose-600 to-red-500 hover:brightness-110 text-white transition-all active:scale-95 shadow-2xl shadow-red-600/70 ring-4 ring-red-500/40 cursor-pointer pointer-events-auto"
+          className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-full bg-gradient-to-tr from-red-600 via-rose-600 to-red-500 hover:brightness-110 text-white transition-all active:scale-95 shadow-2xl shadow-red-600/70 ring-4 ring-red-500/40 cursor-pointer pointer-events-auto shrink-0"
         >
-          <PhoneOff size={30} className="rotate-[135deg]" />
+          <PhoneOff size={28} className="text-white" />
         </button>
       </div>
     </div>

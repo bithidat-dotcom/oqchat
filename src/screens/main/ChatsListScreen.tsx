@@ -194,13 +194,21 @@ export default function ChatsListScreen() {
       {/* Header */}
       <div className="px-4 pt-[10px] pb-2">
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-500 text-white shadow-sm overflow-hidden shrink-0">
               <img src="/favicon.jpg" alt="OQChat Logo" className="h-full w-full object-cover" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
+            {/* New Chat Button (Positioned on Left Side) */}
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-tr from-[#88FF00] to-[#8EFE00] text-zinc-950 transition-all hover:brightness-105 active:scale-95 shadow-md shadow-[#88FF00]/25 ml-1 shrink-0"
+              title="New Chat"
+            >
+              <Plus size={18} strokeWidth={2.5} />
+            </button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {currentUserProfile && (
               <span className="hidden sm:inline text-sm font-medium text-zinc-600 dark:text-zinc-300 mr-1">
                 {currentUserProfile.display_name}
@@ -223,15 +231,6 @@ export default function ChatsListScreen() {
               title="Call History & Calls"
             >
               <Phone size={18} />
-            </button>
-
-            {/* New Chat Button */}
-            <button 
-              onClick={() => setIsModalOpen(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#88FF00] to-[#8EFE00] text-zinc-950 transition-all hover:brightness-105 active:scale-95 shadow-md shadow-[#88FF00]/25"
-              title="New Chat"
-            >
-              <Plus size={20} strokeWidth={2.5} />
             </button>
           </div>
         </div>
