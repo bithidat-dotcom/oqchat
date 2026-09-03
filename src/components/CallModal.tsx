@@ -16,14 +16,10 @@ const ICE_SERVERS = {
 };
 
 const CALL_BACKGROUNDS = [
+  { name: 'Sky Anime Glow (9:16)', url: 'https://i.pinimg.com/736x/4c/b3/a1/4cb3a11088f8031e28885a89426efea2.jpg' },
   { name: 'Aesthetic Sunset (9:16)', url: 'https://i.pinimg.com/1200x/a2/c7/62/a2c762f9f30248a255b08c51c020cbf5.jpg' },
   { name: 'Anime Sky Glow (9:16)', url: 'https://i.pinimg.com/736x/86/82/ac/8682ac3264f7b7210e92b4963ec73a82.jpg' },
-  { name: 'Sky Anime Glow (9:16)', url: 'https://i.pinimg.com/736x/4c/b3/a1/4cb3a11088f8031e28885a89426efea2.jpg' },
   { name: 'Purple Night Clouds (9:16)', url: 'https://i.pinimg.com/1200x/3b/4f/9c/3b4f9cd70c8878e2677d57990c039015.jpg' },
-  { name: 'Dark Minimal', url: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop' },
-  { name: 'Abstract Pink/Blue', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1964&auto=format&fit=crop' },
-  { name: 'Colorful Gradient', url: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?q=80&w=2070&auto=format&fit=crop' },
-  { name: 'Dark Blue Gradient', url: 'https://images.unsplash.com/photo-1557683316-973673baf926?q=80&w=2029&auto=format&fit=crop' },
 ];
 
 // Fallback stream creator when browser/iframe restricts camera/microphone access
@@ -660,11 +656,16 @@ export default function CallModal() {
 
   return (
     <div className="fixed inset-0 z-[99999] flex flex-col bg-zinc-950 text-white overflow-hidden animate-in fade-in duration-200 select-none pointer-events-auto">
-      {/* Background Layer (Clear 9:16 ratio display) */}
-      <div className="absolute inset-0 z-0 bg-zinc-950">
-        <img src={currentBg} alt="Call Background" className="w-full h-full object-cover opacity-95 transition-all duration-500" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/80" />
-      </div>
+      {/* Background Layer (Only for Voice Calls) */}
+      {activeCall?.type !== 'video' && (
+        <div className="absolute inset-0 z-0 bg-zinc-950">
+          <img src={currentBg} alt="Call Background" className="w-full h-full object-cover opacity-95 transition-all duration-500" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black/80" />
+        </div>
+      )}
+      {activeCall?.type === 'video' && (
+        <div className="absolute inset-0 z-0 bg-black" />
+      )}
 
       {/* Call Header */}
       <div className="relative z-20 pt-10 px-6 flex items-center justify-between">
@@ -679,23 +680,36 @@ export default function CallModal() {
           </div>
         </div>
 
-        {/* Fullscreen & Background Quick Actions */}
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={() => setShowBgPicker(prev => !prev)}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md hover:bg-white/25 text-white transition-all ring-1 ring-white/20 active:scale-95"
-            title="Change Background"
-          >
-            <ImageIcon size={20} />
-          </button>
-          <button 
-            onClick={toggleFullscreen}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md hover:bg-white/25 text-white transition-all ring-1 ring-white/20 active:scale-95"
-            title="Fullscreen Mode"
-          >
-            {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-          </button>
-        </div>
+            {/* Fullscreen & Background Quick Actions (Only for Voice Calls) */}
+        {activeCall?.type !== 'video' && (
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setShowBgPicker(prev => !prev)}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md hover:bg-white/25 text-white transition-all ring-1 ring-white/20 active:scale-95"
+              title="Change Background"
+            >
+              <ImageIcon size={20} />
+            </button>
+            <button 
+              onClick={toggleFullscreen}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md hover:bg-white/25 text-white transition-all ring-1 ring-white/20 active:scale-95"
+              title="Fullscreen Mode"
+            >
+              {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+            </button>
+          </div>
+        )}
+        {activeCall?.type === 'video' && (
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={switchCameraFacingMode}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 backdrop-blur-md hover:bg-white/25 text-white transition-all ring-1 ring-white/20 active:scale-95"
+              title="Flip Camera"
+            >
+              <SwitchCamera size={20} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Live Video / Main Content Grid (Strict 9:16 Portrait Ratio Layout) */}
@@ -737,14 +751,19 @@ export default function CallModal() {
             ))}
           </div>
         ) : (
-          /* Single 1-on-1 Call View (Full Screen 9:16 Portrait Video + Floating Self-View PIP) */
-          <div className="absolute inset-0 w-full h-full flex items-center justify-center overflow-hidden">
+          /* Single 1-on-1 Call View (Full Screen Video + Floating Self-View PIP) */
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center bg-black overflow-hidden">
             {activeCall?.type === 'video' ? (
-              <div className="relative inset-0 w-full h-full flex items-center justify-center bg-black overflow-hidden">
-                {/* Remote Video Stream (Full 9:16 Portrait Cover) */}
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover aspect-[9/16]" />
+              <div className="absolute inset-0 w-full h-full">
+                {/* Remote Video Stream (True Full Screen Cover) */}
+                <video 
+                  ref={remoteVideoRef} 
+                  autoPlay 
+                  playsInline 
+                  className="absolute inset-0 w-full h-full object-cover" 
+                />
                 
-                {/* Floating Self Camera View PIP (9:16 Ratio) */}
+                {/* Floating Self Camera View PIP */}
                 {cameraOn && (
                   <div className="absolute top-24 right-4 w-28 h-48 sm:w-36 sm:h-64 aspect-[9/16] rounded-2xl overflow-hidden ring-2 ring-white/30 shadow-2xl z-30 bg-zinc-900/80 backdrop-blur-md transition-all">
                     <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
@@ -767,14 +786,60 @@ export default function CallModal() {
                 )}
               </div>
             ) : (
-              /* Voice Call Screen - Clean Full View */
-              <div className="flex flex-col items-center justify-center text-center z-10 p-6 space-y-6">
-                {activeCall?.status === 'connected' && (
-                  <div className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-black/40 backdrop-blur-md border border-white/10 shadow-lg animate-pulse">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <span className="text-xs font-semibold text-emerald-300">Audio Call Active</span>
+              /* Voice Call Screen - New UX Design with Pulsating Avatar */
+              <div className="flex flex-col items-center justify-center text-center z-10 p-6 space-y-12">
+                <div className="relative">
+                  {/* Multiple Pulsating Rings */}
+                  <div className="absolute inset-0 rounded-full bg-brand-500/20 animate-ping duration-[3000ms]" />
+                  <div className="absolute inset-0 rounded-full bg-brand-500/10 animate-ping duration-[2000ms] delay-700" />
+                  
+                  {/* Large User Avatar */}
+                  <div className="relative z-10 w-40 h-40 sm:w-48 sm:h-48 rounded-full overflow-hidden border-4 border-white/20 shadow-[0_0_80px_rgba(136,255,0,0.25)] ring-4 ring-brand-500/30">
+                    {receiverProfile?.avatar_url ? (
+                      <img src={receiverProfile.avatar_url} alt="User" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-tr from-brand-500 to-emerald-500 flex items-center justify-center">
+                        <span className="text-6xl font-bold text-white uppercase">
+                          {(receiverProfile?.display_name || 'U').charAt(0)}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="text-4xl font-extrabold text-white tracking-tight drop-shadow-xl">
+                      {receiverProfile?.display_name || 'User'}
+                    </h3>
+                    <div className="flex items-center justify-center gap-2">
+                      <div className={cn(
+                        "w-2 h-2 rounded-full",
+                        activeCall?.status === 'connected' ? "bg-emerald-400 animate-pulse" : "bg-zinc-400"
+                      )} />
+                      <span className="text-base font-semibold text-zinc-300">
+                        {activeCall?.status === 'connected' ? 'Connected' : (activeCall?.status === 'ringing' ? 'Ringing...' : 'Calling...')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {activeCall?.status === 'connected' && (
+                    <div className="inline-flex items-center gap-3 px-6 py-2.5 rounded-full bg-black/40 backdrop-blur-xl border border-white/15 shadow-2xl">
+                      <Volume2 size={18} className="text-brand-400 animate-bounce" />
+                      <div className="flex gap-1 items-end h-3">
+                        <div className="w-1 h-2 bg-brand-400 rounded-full animate-[voice-wave_1s_ease-in-out_infinite]" />
+                        <div className="w-1 h-3 bg-brand-400 rounded-full animate-[voice-wave_1.2s_ease-in-out_infinite_0.2s]" />
+                        <div className="w-1 h-1.5 bg-brand-400 rounded-full animate-[voice-wave_0.8s_ease-in-out_infinite_0.4s]" />
+                        <div className="w-1 h-2.5 bg-brand-400 rounded-full animate-[voice-wave_1.1s_ease-in-out_infinite_0.1s]" />
+                      </div>
+                      <span className="text-sm font-bold text-white tabular-nums tracking-wider">
+                        {/* Timer could be added here if we had duration state */}
+                        HD Audio
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 {activeCall?.status === 'connected' && <audio ref={remoteVideoRef} autoPlay />}
               </div>
             )}
@@ -864,14 +929,16 @@ export default function CallModal() {
           {speakerOn ? <Volume2 size={20} /> : <VolumeX size={20} />}
         </button>
 
-        {/* Background Quick Switcher */}
-        <button 
-          onClick={() => setShowBgPicker(prev => !prev)} 
-          title="Choose Call Background Image"
-          className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl text-white ring-1 ring-white/30 transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0"
-        >
-          <ImageIcon size={20} />
-        </button>
+        {/* Background Quick Switcher (Only for Voice Calls) */}
+        {activeCall?.type !== 'video' && (
+          <button 
+            onClick={() => setShowBgPicker(prev => !prev)} 
+            title="Choose Call Background Image"
+            className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-xl text-white ring-1 ring-white/30 transition-all active:scale-95 shadow-xl cursor-pointer pointer-events-auto shrink-0"
+          >
+            <ImageIcon size={20} />
+          </button>
+        )}
 
         {/* End Call / Cancel Call Button */}
         <button 

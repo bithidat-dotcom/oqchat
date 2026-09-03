@@ -523,7 +523,15 @@ export default function ChatScreen() {
       audioChunksRef.current = [];
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
+        
+        // Detect best supported mime type
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+          ? 'audio/webm;codecs=opus' 
+          : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+            ? 'audio/ogg;codecs=opus'
+            : '';
+
+        const mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
         mediaRecorderRef.current = mediaRecorder;
 
         mediaRecorder.ondataavailable = (event) => {
@@ -535,7 +543,8 @@ export default function ChatScreen() {
         mediaRecorder.start();
       }
     } catch (err) {
-      console.log('MediaRecorder fallback used', err);
+      console.log('MediaRecorder error:', err);
+      toast.error('Could not start recording');
     }
 
     setIsRecording(true);
@@ -552,18 +561,24 @@ export default function ChatScreen() {
 
     let audioUrl: string | null = null;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      const mimeType = mediaRecorderRef.current.mimeType;
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       
       await new Promise((res) => setTimeout(res, 200));
       if (audioChunksRef.current.length > 0) {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || 'audio/webm' });
         audioUrl = URL.createObjectURL(audioBlob);
       }
     }
 
     setIsRecording(false);
     setRecordingSeconds(0);
+
+    if (!audioUrl) {
+      toast.error('Recording failed');
+      return;
+    }
 
     await sendMessage(
       conversationId,
@@ -574,7 +589,7 @@ export default function ChatScreen() {
     );
 
     setReplyToMsg(null);
-    toast.success('MP3 Voice message sent');
+    toast.success('Voice message sent');
     scrollToBottom();
   };
 
@@ -759,14 +774,14 @@ export default function ChatScreen() {
             <button 
               onClick={() => handleCall('voice')}
               title={isGroupOrCommunity ? "Group Voice Call" : (isSelf ? "Call yourself" : "Voice call")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-90"
             >
               <Phone size={20} />
             </button>
             <button 
               onClick={() => handleCall('video')}
               title={isGroupOrCommunity ? "Group Video Call" : (isSelf ? "Video call yourself" : "Video call")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-brand-600 transition-colors hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-500/10"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-700 dark:text-zinc-200 transition-all hover:bg-zinc-100 dark:hover:bg-zinc-800 active:scale-90"
             >
               <Video size={22} />
             </button>
@@ -1468,7 +1483,7 @@ export default function ChatScreen() {
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 shadow-md",
                 (content.trim() || selectedMedia)
                   ? "bg-gradient-to-r from-[#88FF00] to-[#8EFE00] text-zinc-950 font-bold hover:brightness-105 active:scale-95 shadow-[#88FF00]/30" 
-                  : "bg-gradient-to-r from-[#88FF00] to-[#8EFE00] text-zinc-950 font-bold hover:brightness-105 active:scale-95 shadow-[#88FF00]/30"
+                  : "bg-zinc-100 text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 active:scale-95"
               )}
             >
               {(content.trim() || selectedMedia) ? <Send size={20} className="ml-0.5" /> : <Mic size={20} />}

@@ -322,7 +322,7 @@ export default function ChatsListScreen() {
                         if (unreadCount === 0) return null;
                         const unreadDisplay = unreadCount >= 4 ? '4+' : String(unreadCount);
                         return (
-                          <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-emerald-500 text-[9px] font-bold text-white px-1 ring-2 ring-white dark:ring-zinc-900 shadow-sm z-10">
+                          <span className="absolute -top-1 -left-1 flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-emerald-500 text-[9px] font-bold text-white px-1 ring-2 ring-white dark:ring-zinc-900 shadow-sm z-10">
                             {unreadDisplay}
                           </span>
                         );
